@@ -1,5 +1,13 @@
 # EO Academy Learning Engine
 
+## Admin & Support update
+
+- Owner admin email: `bobhendam@gmail.com`
+- Secure admin login: `/admin-login`
+- Admin dashboard: `/admin`
+- Students can open the internal support chat from the floating **اسألنا** button.
+- Run `supabase/migrations/20260908100000_admin_and_support_chat.sql` once in Supabase SQL Editor before deploying this version.
+
 منصة عربية RTL للكورس المجاني: تسجيل الطلاب، بوابة متابعة قناة يوتيوب، خمس محاضرات متسلسلة، اختبار بعد كل محاضرة، مشروع تخرج، شهادة إتمام، ولوحة إدارة.
 
 ## الموجود في النسخة الحالية
@@ -91,4 +99,3 @@ npm run lint
 ## المرحلة التالية
 
 النسخة الحالية جاهزة للمعاينة وبها قاعدة البيانات الآمنة. المرحلة التالية هي استبدال بيانات الـDemo بقراءة وكتابة كاملة من Supabase داخل صفحات الطالب والأدمن، ثم إضافة محرر أسئلة، رفع مشروع حقيقي، ومولد شهادة PDF برقم تحقق.
-Deployment updated.

@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 type DbLesson = { id: string; position: number; title: string; description: string; duration_minutes: number; is_published: boolean; lesson_media: { youtube_video_id: string }[] | null }
 type Thread = { id: string; user_id: string; status: string; last_message_at: string; profiles: { full_name: string; phone: string } | null }
 type ChatMessage = { id: string; sender_id: string; body: string; read_at: string | null; created_at: string }
+type DbStudent = { id: string; full_name: string; phone: string; audience_role: string; goal: string; created_at: string; enrollments: { status: string; enrolled_at: string; completed_at: string | null }[] | null }
 
 function extractYouTubeId(value: string) {
   const trimmed = value.trim(); if (!trimmed) return ''
@@ -23,6 +24,7 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [adminId, setAdminId] = useState('')
   const [studentCount, setStudentCount] = useState(0)
+  const [students, setStudents] = useState<DbStudent[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [replyDraft, setReplyDraft] = useState('')
   const [sendingReply, setSendingReply] = useState(false)
@@ -40,17 +42,18 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
   const loadDashboard = async () => {
     if (!supabase) return
     setLoading(true)
-    const [{ data: auth }, { data: dbLessons }, { data: dbThreads }, { count }] = await Promise.all([
+    const [{ data: auth }, { data: dbLessons }, { data: dbThreads }, { data: dbStudents, count }] = await Promise.all([
       supabase.auth.getUser(),
       supabase.from('lessons').select('id,position,title,description,duration_minutes,is_published,lesson_media(youtube_video_id)').order('position'),
       supabase.from('support_threads').select('id,user_id,status,last_message_at,profiles(full_name,phone)').order('last_message_at', { ascending: false }),
-      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
+      supabase.from('profiles').select('id,full_name,phone,audience_role,goal,created_at,enrollments(status,enrolled_at,completed_at)', { count: 'exact' }).eq('role', 'student').order('created_at', { ascending: false }),
     ])
     setAdminId(auth.user?.id || '')
     void refreshUnreadCount(auth.user?.id || '')
     setLessons((dbLessons || []) as unknown as DbLesson[])
     setThreads((dbThreads || []) as unknown as Thread[])
     setStudentCount(count || 0)
+    setStudents((dbStudents || []) as unknown as DbStudent[])
     setLoading(false)
   }
 
@@ -125,7 +128,8 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
         {active === 'dashboard' && <><section className="admin-stats"><article><span>المسجلون</span><strong>{studentCount}</strong><small>حساب طالب</small></article><article><span>المحاضرات المنشورة</span><strong>{lessons.filter(x => x.is_published).length}</strong><small>من أصل {lessons.length}</small></article><article><span>المحادثات</span><strong>{threads.length}</strong><small>رسائل دعم داخلية</small></article><article><span>حالة الإدارة</span><strong>مؤمّن</strong><small>bobhendam@gmail.com</small></article></section><section className="admin-panel placeholder-panel"><LayoutDashboard size={42}/><h2>أهلًا يا كابتن إيهاب</h2><p>من هنا هتدير المحتوى، الطلاب، الرسائل، المشاريع والشهادات.</p></section></>}
         {active === 'course' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>إدارة المحاضرات</h2><p>أضف أو احذف محاضرات، والصق لينك YouTube الـUnlisted ثم احفظ.</p></div><div><button className="primary-button" type="button" onClick={() => void addLesson()} disabled={addingLesson}><Plus/> {addingLesson ? 'جاري الإضافة...' : 'إضافة محاضرة'}</button> <span className="status-badge">Supabase Live</span></div></div><div className="admin-lessons">{lessons.map((lesson) => <form key={lesson.id} className="admin-lesson-form" onSubmit={(event) => void saveLesson(event, lesson.id)}><div className="admin-lesson-title"><span>{lesson.position}</span><div><strong>المحاضرة {lesson.position}</strong><small>{lesson.lesson_media?.[0]?.youtube_video_id ? 'تم ربط الفيديو' : 'في انتظار الفيديو'}</small></div></div><label>العنوان<input name="title" defaultValue={lesson.title} required /></label><label>الوصف<textarea name="description" defaultValue={lesson.description} rows={2}/></label><div className="form-grid"><label>المدة بالدقائق<input name="duration" type="number" min="1" defaultValue={lesson.duration_minutes}/></label><label className="publish-check"><input name="published" type="checkbox" defaultChecked={lesson.is_published}/> منشورة للطلاب</label></div><label>لينك YouTube Unlisted<input name="youtubeUrl" defaultValue={lesson.lesson_media?.[0]?.youtube_video_id || ''} placeholder="https://youtu.be/xxxxxxxxxxx"/></label><div className="lesson-actions"><button className="primary-button" type="submit">{saved === lesson.id ? <><CheckCircle2/> تم الحفظ</> : <><Save/> حفظ المحاضرة</>}</button><button className="danger-button" type="button" onClick={() => void deleteLesson(lesson)}><Trash2/> حذف</button></div></form>)}</div></section>}
         {active === 'messages' && <section className="admin-panel chat-admin"><aside className="thread-list"><h2>المحادثات</h2>{threads.length === 0 ? <p className="muted">مفيش أسئلة لسه.</p> : threads.map((thread) => <button key={thread.id} className={selectedThread === thread.id ? 'active' : ''} onClick={() => setSelectedThread(thread.id)}><span className="thread-avatar">{thread.profiles?.full_name?.charAt(0) || 'ط'}</span><span><strong>{thread.profiles?.full_name || 'طالب'}</strong><small>{new Date(thread.last_message_at).toLocaleString('ar-EG')}</small></span></button>)}</aside><div className="admin-conversation">{!selectedThread ? <div className="chat-state"><MessageCircle/><strong>اختار محادثة</strong><span>رسائل الطالب هتظهر هنا.</span></div> : <><div className="admin-message-list">{messages.map((message) => <div key={message.id} className={`chat-bubble ${message.sender_id === adminId ? 'mine' : 'admin'}`}><p>{message.body}</p><time>{new Date(message.created_at).toLocaleString('ar-EG')}</time></div>)}</div><form onSubmit={(event) => void sendReply(event)}><input name="message" value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} required maxLength={2000} placeholder="اكتب ردك للطالب..."/><button className="primary-button" disabled={sendingReply || !replyDraft.trim()}><Send size={18}/> {sendingReply ? 'جاري الإرسال...' : 'إرسال'}</button></form></>}</div></section>}
-        {active !== 'dashboard' && active !== 'course' && active !== 'messages' && <section className="admin-panel placeholder-panel"><Settings size={42}/><h2>القسم جاهز للمرحلة التالية</h2><p>هنفعّل بياناته الحقيقية بعد تثبيت الإدارة والشات وتجربتهم.</p></section>}
+        {active === 'students' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>الطلاب المسجلون</h2><p>بيانات حقيقية من الحسابات المسجلة في المنصة.</p></div><strong>{students.length} طالب</strong></div>{students.length === 0 ? <div className="chat-state"><Users/><strong>لسه مفيش طلاب مسجلين</strong><span>أول ما طالب يعمل حساب، بياناته هتظهر هنا تلقائيًا.</span></div> : <div className="student-table-wrap"><table className="student-table"><thead><tr><th>الطالب</th><th>الهاتف</th><th>الصفة / الهدف</th><th>حالة الاشتراك</th><th>تاريخ التسجيل</th></tr></thead><tbody>{students.map((student) => { const enrollment = student.enrollments?.[0]; return <tr key={student.id}><td><strong>{student.full_name || 'بدون اسم'}</strong></td><td dir="ltr">{student.phone || '—'}</td><td>{[student.audience_role, student.goal].filter(Boolean).join(' — ') || '—'}</td><td><span className="status-badge">{enrollment?.status === 'completed' ? 'مكتمل' : enrollment?.status === 'suspended' ? 'موقوف' : enrollment ? 'نشط' : 'لم يبدأ'}</span></td><td>{new Date(student.created_at).toLocaleDateString('ar-EG')}</td></tr> })}</tbody></table></div>}</section>}
+        {active !== 'dashboard' && active !== 'course' && active !== 'messages' && active !== 'students' && <section className="admin-panel placeholder-panel"><Settings size={42}/><h2>القسم جاهز للمرحلة التالية</h2><p>هنفعّل بياناته الحقيقية بعد تثبيت الإدارة والشات وتجربتهم.</p></section>}
       </>}
     </main>
   </div>

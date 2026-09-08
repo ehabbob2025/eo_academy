@@ -330,3 +330,11 @@ textarea { resize: vertical; }
   .chat-admin { grid-template-columns: 1fr; }
   .thread-list { max-height: 230px; border-inline-end: 0; border-bottom: 1px solid var(--border); }
 }
+
+
+.student-table-wrap { overflow-x: auto; }
+.student-table { width: 100%; min-width: 760px; border-collapse: collapse; text-align: right; }
+.student-table th, .student-table td { padding: 14px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.student-table th { color: var(--muted); font-size: .86rem; font-weight: 700; }
+.student-table td { color: var(--ink); font-size: .93rem; }
+.student-table tbody tr:hover { background: #fbfcf8; }

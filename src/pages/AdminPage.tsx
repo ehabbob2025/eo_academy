@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, CheckCircle2, FileCheck2, GraduationCap, LayoutDashboard, LogOut, MessageCircle, RefreshCw, Save, Send, Settings, Users } from 'lucide-react'
+import { BarChart3, BookOpen, CheckCircle2, FileCheck2, GraduationCap, LayoutDashboard, LogOut, MessageCircle, Plus, RefreshCw, Save, Send, Settings, Trash2, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase'
 
 type DbLesson = { id: string; position: number; title: string; description: string; duration_minutes: number; is_published: boolean; lesson_media: { youtube_video_id: string }[] | null }
 type Thread = { id: string; user_id: string; status: string; last_message_at: string; profiles: { full_name: string; phone: string } | null }
-type ChatMessage = { id: string; sender_id: string; body: string; created_at: string }
+type ChatMessage = { id: string; sender_id: string; body: string; read_at: string | null; created_at: string }
 
 function extractYouTubeId(value: string) {
   const trimmed = value.trim(); if (!trimmed) return ''
@@ -23,9 +23,19 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [adminId, setAdminId] = useState('')
   const [studentCount, setStudentCount] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [replyDraft, setReplyDraft] = useState('')
+  const [sendingReply, setSendingReply] = useState(false)
+  const [addingLesson, setAddingLesson] = useState(false)
   const [saved, setSaved] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
+
+  const refreshUnreadCount = async (uid = adminId) => {
+    if (!supabase || !uid) return
+    const { count } = await supabase.from('support_messages').select('id', { count: 'exact', head: true }).neq('sender_id', uid).is('read_at', null)
+    setUnreadCount(count || 0)
+  }
 
   const loadDashboard = async () => {
     if (!supabase) return
@@ -37,6 +47,7 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
     ])
     setAdminId(auth.user?.id || '')
+    void refreshUnreadCount(auth.user?.id || '')
     setLessons((dbLessons || []) as unknown as DbLesson[])
     setThreads((dbThreads || []) as unknown as Thread[])
     setStudentCount(count || 0)
@@ -47,11 +58,33 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
   useEffect(() => {
     if (!supabase || !selectedThread) { setMessages([]); return }
     const client = supabase
-    const load = async () => { const { data } = await client.from('support_messages').select('id,sender_id,body,created_at').eq('thread_id', selectedThread).order('created_at'); setMessages((data || []) as ChatMessage[]) }
+    const load = async () => { const { data } = await client.from('support_messages').select('id,sender_id,body,read_at,created_at').eq('thread_id', selectedThread).order('created_at'); setMessages((data || []) as ChatMessage[])
+      if (adminId) {
+        await client.from('support_messages').update({ read_at: new Date().toISOString() }).eq('thread_id', selectedThread).neq('sender_id', adminId).is('read_at', null)
+        void refreshUnreadCount(adminId)
+      } }
     void load()
     const channel = client.channel(`admin-${selectedThread}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `thread_id=eq.${selectedThread}` }, (payload) => setMessages((current) => current.some((item) => item.id === payload.new.id) ? current : [...current, payload.new as ChatMessage])).subscribe()
     return () => { void client.removeChannel(channel) }
   }, [selectedThread])
+
+  const addLesson = async () => {
+    if (!supabase || addingLesson) return
+    setAddingLesson(true); setNotice('')
+    const position = (lessons.reduce((max, lesson) => Math.max(max, lesson.position), 0) || 0) + 1
+    const { error } = await supabase.from('lessons').insert({ course_id: '11111111-1111-4111-8111-111111111111', position, title: `المحاضرة ${position}`, description: '', duration_minutes: 10, is_published: false })
+    setAddingLesson(false)
+    if (error) { setNotice('تعذرت إضافة المحاضرة. راجع صلاحية حساب الإدارة.'); return }
+    setNotice('تمت إضافة محاضرة جديدة. أضف عنوانها ولينك الفيديو ثم احفظ.'); await loadDashboard()
+  }
+
+  const deleteLesson = async (lesson: DbLesson) => {
+    if (!supabase) return
+    if (!window.confirm(`حذف «${lesson.title}» نهائيًا؟ لن يمكن استرجاع الفيديو أو بيانات المحاضرة.`)) return
+    const { error } = await supabase.from('lessons').delete().eq('id', lesson.id)
+    if (error) { setNotice('الحذف فشل. راجع صلاحية حساب الإدارة.'); return }
+    setNotice('تم حذف المحاضرة.'); await loadDashboard()
+  }
 
   const saveLesson = async (event: FormEvent<HTMLFormElement>, lessonId: string) => {
     event.preventDefault(); if (!supabase) return
@@ -65,9 +98,11 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
 
   const sendReply = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); if (!supabase || !selectedThread || !adminId) return
-    const body = String(new FormData(event.currentTarget).get('message') || '').trim(); if (!body) return
+    const body = replyDraft.trim(); if (!body || sendingReply) return
+    setSendingReply(true)
     const { error } = await supabase.from('support_messages').insert({ thread_id: selectedThread, sender_id: adminId, body })
-    if (!error) event.currentTarget.reset(); else setNotice('الرد متبعتش، جرّب تاني.')
+    setSendingReply(false)
+    if (!error) setReplyDraft(''); else setNotice('الرد متبعتش، جرّب تاني.')
   }
 
   const logout = async () => { await supabase?.auth.signOut(); navigate('/admin-login') }
@@ -77,7 +112,7 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
     <aside className="admin-sidebar"><Link className="brand" to="/"><span className="brand-mark">EO</span><span><strong>EHAB OSAMA</strong><small>ADMIN PANEL</small></span></Link><nav>
       <button className={active === 'dashboard' ? 'active' : ''} onClick={() => setActive('dashboard')}><LayoutDashboard /> نظرة عامة</button>
       <button className={active === 'course' ? 'active' : ''} onClick={() => setActive('course')}><BookOpen /> الكورس والمحاضرات</button>
-      <button className={active === 'messages' ? 'active' : ''} onClick={() => setActive('messages')}><MessageCircle /> الرسائل {threads.length > 0 && <b className="nav-count">{threads.length}</b>}</button>
+      <button className={active === 'messages' ? 'active' : ''} onClick={() => setActive('messages')}><MessageCircle /> الرسائل {unreadCount > 0 && <b className="nav-count">{unreadCount}</b>}</button>
       <button className={active === 'students' ? 'active' : ''} onClick={() => setActive('students')}><Users /> الطلاب</button>
       <button className={active === 'projects' ? 'active' : ''} onClick={() => setActive('projects')}><FileCheck2 /> المشاريع</button>
       <button className={active === 'certificates' ? 'active' : ''} onClick={() => setActive('certificates')}><GraduationCap /> الشهادات</button>
@@ -88,8 +123,8 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
       {notice && <div className="admin-notice">{notice}</div>}
       {loading ? <div className="admin-panel empty-admin">جاري تحميل بيانات المنصة...</div> : <>
         {active === 'dashboard' && <><section className="admin-stats"><article><span>المسجلون</span><strong>{studentCount}</strong><small>حساب طالب</small></article><article><span>المحاضرات المنشورة</span><strong>{lessons.filter(x => x.is_published).length}</strong><small>من أصل {lessons.length}</small></article><article><span>المحادثات</span><strong>{threads.length}</strong><small>رسائل دعم داخلية</small></article><article><span>حالة الإدارة</span><strong>مؤمّن</strong><small>bobhendam@gmail.com</small></article></section><section className="admin-panel placeholder-panel"><LayoutDashboard size={42}/><h2>أهلًا يا كابتن إيهاب</h2><p>من هنا هتدير المحتوى، الطلاب، الرسائل، المشاريع والشهادات.</p></section></>}
-        {active === 'course' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>إدارة المحاضرات الخمسة</h2><p>الصق لينك YouTube الـUnlisted وعدّل المحتوى ثم اضغط حفظ.</p></div><span className="status-badge">Supabase Live</span></div><div className="admin-lessons">{lessons.map((lesson) => <form key={lesson.id} className="admin-lesson-form" onSubmit={(event) => void saveLesson(event, lesson.id)}><div className="admin-lesson-title"><span>{lesson.position}</span><div><strong>المحاضرة {lesson.position}</strong><small>{lesson.lesson_media?.[0]?.youtube_video_id ? 'تم ربط الفيديو' : 'في انتظار الفيديو'}</small></div></div><label>العنوان<input name="title" defaultValue={lesson.title} required /></label><label>الوصف<textarea name="description" defaultValue={lesson.description} rows={2}/></label><div className="form-grid"><label>المدة بالدقائق<input name="duration" type="number" min="1" defaultValue={lesson.duration_minutes}/></label><label className="publish-check"><input name="published" type="checkbox" defaultChecked={lesson.is_published}/> منشورة للطلاب</label></div><label>لينك YouTube Unlisted<input name="youtubeUrl" defaultValue={lesson.lesson_media?.[0]?.youtube_video_id || ''} placeholder="https://youtu.be/xxxxxxxxxxx"/></label><button className="primary-button" type="submit">{saved === lesson.id ? <><CheckCircle2/> تم الحفظ</> : <><Save/> حفظ المحاضرة</>}</button></form>)}</div></section>}
-        {active === 'messages' && <section className="admin-panel chat-admin"><aside className="thread-list"><h2>المحادثات</h2>{threads.length === 0 ? <p className="muted">مفيش أسئلة لسه.</p> : threads.map((thread) => <button key={thread.id} className={selectedThread === thread.id ? 'active' : ''} onClick={() => setSelectedThread(thread.id)}><span className="thread-avatar">{thread.profiles?.full_name?.charAt(0) || 'ط'}</span><span><strong>{thread.profiles?.full_name || 'طالب'}</strong><small>{new Date(thread.last_message_at).toLocaleString('ar-EG')}</small></span></button>)}</aside><div className="admin-conversation">{!selectedThread ? <div className="chat-state"><MessageCircle/><strong>اختار محادثة</strong><span>رسائل الطالب هتظهر هنا.</span></div> : <><div className="admin-message-list">{messages.map((message) => <div key={message.id} className={`chat-bubble ${message.sender_id === adminId ? 'mine' : 'admin'}`}><p>{message.body}</p><time>{new Date(message.created_at).toLocaleString('ar-EG')}</time></div>)}</div><form onSubmit={(event) => void sendReply(event)}><input name="message" required maxLength={2000} placeholder="اكتب ردك للطالب..."/><button className="primary-button"><Send size={18}/> إرسال</button></form></>}</div></section>}
+        {active === 'course' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>إدارة المحاضرات</h2><p>أضف أو احذف محاضرات، والصق لينك YouTube الـUnlisted ثم احفظ.</p></div><div><button className="primary-button" type="button" onClick={() => void addLesson()} disabled={addingLesson}><Plus/> {addingLesson ? 'جاري الإضافة...' : 'إضافة محاضرة'}</button> <span className="status-badge">Supabase Live</span></div></div><div className="admin-lessons">{lessons.map((lesson) => <form key={lesson.id} className="admin-lesson-form" onSubmit={(event) => void saveLesson(event, lesson.id)}><div className="admin-lesson-title"><span>{lesson.position}</span><div><strong>المحاضرة {lesson.position}</strong><small>{lesson.lesson_media?.[0]?.youtube_video_id ? 'تم ربط الفيديو' : 'في انتظار الفيديو'}</small></div></div><label>العنوان<input name="title" defaultValue={lesson.title} required /></label><label>الوصف<textarea name="description" defaultValue={lesson.description} rows={2}/></label><div className="form-grid"><label>المدة بالدقائق<input name="duration" type="number" min="1" defaultValue={lesson.duration_minutes}/></label><label className="publish-check"><input name="published" type="checkbox" defaultChecked={lesson.is_published}/> منشورة للطلاب</label></div><label>لينك YouTube Unlisted<input name="youtubeUrl" defaultValue={lesson.lesson_media?.[0]?.youtube_video_id || ''} placeholder="https://youtu.be/xxxxxxxxxxx"/></label><div className="lesson-actions"><button className="primary-button" type="submit">{saved === lesson.id ? <><CheckCircle2/> تم الحفظ</> : <><Save/> حفظ المحاضرة</>}</button><button className="danger-button" type="button" onClick={() => void deleteLesson(lesson)}><Trash2/> حذف</button></div></form>)}</div></section>}
+        {active === 'messages' && <section className="admin-panel chat-admin"><aside className="thread-list"><h2>المحادثات</h2>{threads.length === 0 ? <p className="muted">مفيش أسئلة لسه.</p> : threads.map((thread) => <button key={thread.id} className={selectedThread === thread.id ? 'active' : ''} onClick={() => setSelectedThread(thread.id)}><span className="thread-avatar">{thread.profiles?.full_name?.charAt(0) || 'ط'}</span><span><strong>{thread.profiles?.full_name || 'طالب'}</strong><small>{new Date(thread.last_message_at).toLocaleString('ar-EG')}</small></span></button>)}</aside><div className="admin-conversation">{!selectedThread ? <div className="chat-state"><MessageCircle/><strong>اختار محادثة</strong><span>رسائل الطالب هتظهر هنا.</span></div> : <><div className="admin-message-list">{messages.map((message) => <div key={message.id} className={`chat-bubble ${message.sender_id === adminId ? 'mine' : 'admin'}`}><p>{message.body}</p><time>{new Date(message.created_at).toLocaleString('ar-EG')}</time></div>)}</div><form onSubmit={(event) => void sendReply(event)}><input name="message" value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} required maxLength={2000} placeholder="اكتب ردك للطالب..."/><button className="primary-button" disabled={sendingReply || !replyDraft.trim()}><Send size={18}/> {sendingReply ? 'جاري الإرسال...' : 'إرسال'}</button></form></>}</div></section>}
         {active !== 'dashboard' && active !== 'course' && active !== 'messages' && <section className="admin-panel placeholder-panel"><Settings size={42}/><h2>القسم جاهز للمرحلة التالية</h2><p>هنفعّل بياناته الحقيقية بعد تثبيت الإدارة والشات وتجربتهم.</p></section>}
       </>}
     </main>

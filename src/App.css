@@ -225,6 +225,46 @@ textarea { resize: vertical; }
 .placeholder-panel svg { color: var(--gold); }
 .placeholder-panel h2 { color: var(--emerald-950); margin: 12px 0 5px; }
 .reset-demo { margin-top: 18px; border: 0; background: transparent; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; }
+.route-loading { min-height: 100vh; display: grid; place-items: center; background: var(--emerald-950); color: var(--gold-light); }
+.admin-header-actions { display: flex; gap: 9px; }
+.admin-notice { margin-bottom: 16px; padding: 12px 15px; border-radius: 10px; background: #fff8dc; color: #755b08; border: 1px solid rgba(201,162,39,.35); font-size: .82rem; }
+.nav-count { margin-inline-start: auto; min-width: 22px; height: 22px; display: grid; place-items: center; border-radius: 99px; background: var(--gold); color: var(--emerald-950); font-size: .68rem; }
+.publish-check { display: flex !important; align-items: center; justify-content: center; flex-direction: row; min-height: 43px; border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.publish-check input { width: 18px; height: 18px; accent-color: var(--emerald-900); }
+
+/* Student support chat */
+.support-widget { position: fixed; z-index: 90; inset-inline-start: 22px; bottom: 22px; }
+.support-launcher { min-height: 52px; border: 0; border-radius: 999px; padding: 0 19px; display: flex; align-items: center; gap: 8px; background: var(--gold); color: var(--emerald-950); font-weight: 800; box-shadow: 0 14px 35px rgba(8,40,31,.25); }
+.support-window { width: min(370px, calc(100vw - 28px)); height: min(540px, calc(100vh - 45px)); display: grid; grid-template-rows: auto 1fr auto auto; overflow: hidden; border-radius: 18px; background: var(--white); border: 1px solid var(--border); box-shadow: 0 24px 70px rgba(8,40,31,.3); }
+.support-window header { padding: 16px; display: flex; align-items: center; justify-content: space-between; color: var(--white); background: var(--emerald-950); }
+.support-window header > div { display: grid; }
+.support-window header small { color: #b8cec5; margin-top: 3px; }
+.support-window header button { border: 0; color: var(--white); background: transparent; }
+.support-messages, .admin-message-list { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 9px; background: #f4f6f3; }
+.chat-state { height: 100%; min-height: 180px; display: grid; place-items: center; align-content: center; gap: 8px; color: var(--muted); text-align: center; }
+.chat-state svg { color: var(--gold); width: 36px; height: 36px; }
+.chat-bubble { width: fit-content; max-width: 82%; padding: 9px 12px; border-radius: 13px; }
+.chat-bubble p { margin: 0; white-space: pre-wrap; font-size: .84rem; line-height: 1.6; }
+.chat-bubble time { display: block; margin-top: 3px; font-size: .58rem; opacity: .65; }
+.chat-bubble.mine { align-self: flex-start; background: var(--emerald-900); color: var(--white); border-bottom-right-radius: 3px; }
+.chat-bubble.admin { align-self: flex-end; background: var(--white); color: var(--ink); border: 1px solid var(--border); border-bottom-left-radius: 3px; }
+.support-window form, .admin-conversation form { padding: 11px; display: grid; grid-template-columns: 1fr auto; gap: 8px; border-top: 1px solid var(--border); }
+.support-window form button { width: 44px; border: 0; border-radius: 10px; display: grid; place-items: center; background: var(--gold); color: var(--emerald-950); }
+.chat-error { margin: 0; padding: 7px 12px; color: var(--danger); background: #fff0f0; font-size: .7rem; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Admin inbox */
+.chat-admin { min-height: 620px; display: grid; grid-template-columns: 300px 1fr; padding: 0; overflow: hidden; }
+.thread-list { padding: 18px; border-inline-end: 1px solid var(--border); overflow-y: auto; }
+.thread-list h2 { color: var(--emerald-950); }
+.thread-list > button { width: 100%; border: 0; border-radius: 11px; padding: 11px; background: transparent; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; text-align: right; }
+.thread-list > button.active, .thread-list > button:hover { background: var(--emerald-100); }
+.thread-avatar { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: var(--emerald-900); color: var(--white); font-weight: 800; }
+.thread-list button > span:last-child { min-width: 0; display: grid; }
+.thread-list small { color: var(--muted); font-size: .6rem; }
+.admin-conversation { min-width: 0; display: grid; grid-template-rows: 1fr auto; }
+.admin-message-list { max-height: 555px; }
 
 @media (max-width: 980px) {
   .hero-section { grid-template-columns: 1fr; text-align: center; gap: 25px; }
@@ -279,10 +319,14 @@ textarea { resize: vertical; }
   .paid-offer { grid-template-columns: 1fr; text-align: center; justify-items: center; }
   .admin-stats { grid-template-columns: 1fr 1fr; }
   .admin-header { align-items: flex-start; gap: 12px; }
+  .admin-header-actions { display: grid; }
   .admin-header h1 { font-size: 1.45rem; }
   .admin-lesson-form { grid-template-columns: 1fr; }
   .admin-lesson-form > *, .admin-lesson-form > label:nth-of-type(3), .admin-lesson-form > label:nth-of-type(4), .admin-lesson-form button { grid-column: 1; }
   .form-grid { grid-template-columns: 1fr; }
   .submission-row { align-items: stretch; flex-direction: column; }
   .demo-ribbon { inset-inline: 10px; text-align: center; }
+  .support-widget { inset-inline: 10px; bottom: 10px; }
+  .chat-admin { grid-template-columns: 1fr; }
+  .thread-list { max-height: 230px; border-inline-end: 0; border-bottom: 1px solid var(--border); }
 }

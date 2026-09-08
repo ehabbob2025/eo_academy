@@ -8,6 +8,10 @@ alter table public.lesson_progress
 
 grant update (full_name, is_archived) on table public.profiles to authenticated;
 
+drop policy if exists "profiles_admin_manage" on public.profiles;
+create policy "profiles_admin_manage" on public.profiles
+  for update using (public.is_admin()) with check (public.is_admin());
+
 create or replace function public.record_lesson_watch(p_lesson_id uuid, p_increment_seconds integer default 10)
 returns jsonb
 language plpgsql
@@ -71,4 +75,3 @@ end;
 $$;
 
 grant execute on function public.record_lesson_watch(uuid, integer) to authenticated;
-

@@ -48,6 +48,13 @@ create index if not exists support_messages_thread_created_idx
 alter table public.support_threads enable row level security;
 alter table public.support_messages enable row level security;
 
+drop policy if exists "threads_own_or_admin_select" on public.support_threads;
+drop policy if exists "threads_own_insert" on public.support_threads;
+drop policy if exists "threads_admin_update" on public.support_threads;
+drop policy if exists "messages_thread_member_select" on public.support_messages;
+drop policy if exists "messages_thread_member_insert" on public.support_messages;
+drop policy if exists "messages_admin_update" on public.support_messages;
+
 create policy "threads_own_or_admin_select" on public.support_threads
   for select using (user_id = auth.uid() or public.is_admin());
 create policy "threads_own_insert" on public.support_threads
@@ -94,4 +101,3 @@ for each row execute function public.touch_support_thread();
 do $$ begin
   alter publication supabase_realtime add table public.support_messages;
 exception when duplicate_object then null; end $$;
-

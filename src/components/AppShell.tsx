@@ -1,6 +1,7 @@
 import { Award, BookOpen, FolderCheck, Home, LogOut } from 'lucide-react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import type { StudentProfile } from '../types'
+import { SupportChat } from './SupportChat'
 
 export function AppShell({ profile, progress }: { profile: StudentProfile | null; progress: number }) {
   return (
@@ -27,7 +28,7 @@ export function AppShell({ profile, progress }: { profile: StudentProfile | null
         </div>
       </aside>
       <main className="app-main"><Outlet /></main>
+      <SupportChat />
     </div>
   )
 }
-

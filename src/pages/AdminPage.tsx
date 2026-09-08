@@ -1,91 +1,97 @@
-import { BarChart3, BookOpen, CheckCircle2, FileCheck2, GraduationCap, LayoutDashboard, LogOut, RotateCcw, Save, Settings, Users } from 'lucide-react'
-import { useState } from 'react'
+import { BarChart3, BookOpen, CheckCircle2, FileCheck2, GraduationCap, LayoutDashboard, LogOut, MessageCircle, RefreshCw, Save, Send, Settings, Users } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { CourseState } from '../App'
+import { supabase } from '../lib/supabase'
+
+type DbLesson = { id: string; position: number; title: string; description: string; duration_minutes: number; is_published: boolean; lesson_media: { youtube_video_id: string }[] | null }
+type Thread = { id: string; user_id: string; status: string; last_message_at: string; profiles: { full_name: string; phone: string } | null }
+type ChatMessage = { id: string; sender_id: string; body: string; created_at: string }
 
 function extractYouTubeId(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  try {
-    const url = new URL(trimmed)
-    if (url.hostname.includes('youtu.be')) return url.pathname.split('/').filter(Boolean)[0] || ''
-    if (url.searchParams.get('v')) return url.searchParams.get('v') || ''
-    const parts = url.pathname.split('/').filter(Boolean)
-    const marker = parts.findIndex((part) => ['embed', 'shorts', 'live'].includes(part))
-    return marker >= 0 ? parts[marker + 1] || '' : parts.at(-1) || ''
-  } catch {
-    return trimmed
-  }
+  const trimmed = value.trim(); if (!trimmed) return ''
+  try { const url = new URL(trimmed); if (url.hostname.includes('youtu.be')) return url.pathname.split('/').filter(Boolean)[0] || ''; if (url.searchParams.get('v')) return url.searchParams.get('v') || ''; const parts = url.pathname.split('/').filter(Boolean); const marker = parts.findIndex((part) => ['embed', 'shorts', 'live'].includes(part)); return marker >= 0 ? parts[marker + 1] || '' : parts.at(-1) || '' } catch { return trimmed }
 }
 
-export function AdminPage({ state }: { state: CourseState }) {
-  const [active, setActive] = useState('course')
+export function AdminPage({ state: _state }: { state: CourseState }) {
+  const navigate = useNavigate()
+  const [active, setActive] = useState('dashboard')
+  const [lessons, setLessons] = useState<DbLesson[]>([])
+  const [threads, setThreads] = useState<Thread[]>([])
+  const [selectedThread, setSelectedThread] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [adminId, setAdminId] = useState('')
+  const [studentCount, setStudentCount] = useState(0)
   const [saved, setSaved] = useState('')
+  const [notice, setNotice] = useState('')
+  const [loading, setLoading] = useState(true)
 
-  const saveLesson = (event: FormEvent<HTMLFormElement>, lessonId: string) => {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    state.updateLesson(lessonId, {
-      title: String(form.get('title') || '').trim(),
-      description: String(form.get('description') || '').trim(),
-      durationMinutes: Number(form.get('duration') || 0),
-      youtubeVideoId: extractYouTubeId(String(form.get('youtubeUrl') || '')),
-    })
-    setSaved(lessonId)
-    window.setTimeout(() => setSaved(''), 1800)
+  const loadDashboard = async () => {
+    if (!supabase) return
+    setLoading(true)
+    const [{ data: auth }, { data: dbLessons }, { data: dbThreads }, { count }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase.from('lessons').select('id,position,title,description,duration_minutes,is_published,lesson_media(youtube_video_id)').order('position'),
+      supabase.from('support_threads').select('id,user_id,status,last_message_at,profiles(full_name,phone)').order('last_message_at', { ascending: false }),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
+    ])
+    setAdminId(auth.user?.id || '')
+    setLessons((dbLessons || []) as unknown as DbLesson[])
+    setThreads((dbThreads || []) as unknown as Thread[])
+    setStudentCount(count || 0)
+    setLoading(false)
   }
 
-  return (
-    <div className="admin-shell" dir="rtl">
-      <aside className="admin-sidebar">
-        <Link className="brand" to="/"><span className="brand-mark">EO</span><span><strong>EHAB OSAMA</strong><small>ADMIN PANEL</small></span></Link>
-        <nav>
-          <button className={active === 'dashboard' ? 'active' : ''} onClick={() => setActive('dashboard')}><LayoutDashboard /> نظرة عامة</button>
-          <button className={active === 'course' ? 'active' : ''} onClick={() => setActive('course')}><BookOpen /> الكورس والمحاضرات</button>
-          <button className={active === 'students' ? 'active' : ''} onClick={() => setActive('students')}><Users /> الطلاب</button>
-          <button className={active === 'projects' ? 'active' : ''} onClick={() => setActive('projects')}><FileCheck2 /> المشاريع</button>
-          <button className={active === 'certificates' ? 'active' : ''} onClick={() => setActive('certificates')}><GraduationCap /> الشهادات</button>
-          <button className={active === 'analytics' ? 'active' : ''} onClick={() => setActive('analytics')}><BarChart3 /> التحليلات</button>
-          <button className={active === 'settings' ? 'active' : ''} onClick={() => setActive('settings')}><Settings /> الإعدادات</button>
-        </nav>
-        <Link className="admin-logout" to="/"><LogOut /> الخروج من الإدارة</Link>
-      </aside>
+  useEffect(() => { void loadDashboard() }, [])
+  useEffect(() => {
+    if (!supabase || !selectedThread) { setMessages([]); return }
+    const client = supabase
+    const load = async () => { const { data } = await client.from('support_messages').select('id,sender_id,body,created_at').eq('thread_id', selectedThread).order('created_at'); setMessages((data || []) as ChatMessage[]) }
+    void load()
+    const channel = client.channel(`admin-${selectedThread}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `thread_id=eq.${selectedThread}` }, (payload) => setMessages((current) => current.some((item) => item.id === payload.new.id) ? current : [...current, payload.new as ChatMessage])).subscribe()
+    return () => { void client.removeChannel(channel) }
+  }, [selectedThread])
 
-      <main className="admin-main">
-        <header className="admin-header"><div><span className="eyebrow">لوحة الإدارة</span><h1>{active === 'course' ? 'الكورس والمحاضرات' : 'EO Academy Dashboard'}</h1></div><Link className="secondary-button" to="/dashboard">معاينة كطالب</Link></header>
+  const saveLesson = async (event: FormEvent<HTMLFormElement>, lessonId: string) => {
+    event.preventDefault(); if (!supabase) return
+    const form = new FormData(event.currentTarget)
+    const youtubeVideoId = extractYouTubeId(String(form.get('youtubeUrl') || ''))
+    const { error } = await supabase.from('lessons').update({ title: String(form.get('title') || '').trim(), description: String(form.get('description') || '').trim(), duration_minutes: Number(form.get('duration') || 0), is_published: form.get('published') === 'on' }).eq('id', lessonId)
+    const mediaResult = youtubeVideoId ? await supabase.from('lesson_media').upsert({ lesson_id: lessonId, youtube_video_id: youtubeVideoId }) : await supabase.from('lesson_media').delete().eq('lesson_id', lessonId)
+    if (error || mediaResult.error) { setNotice('الحفظ فشل، راجع صلاحية حساب الإدارة.'); return }
+    setSaved(lessonId); setNotice('تم حفظ المحاضرة وظهرت للطلاب.'); await loadDashboard(); window.setTimeout(() => setSaved(''), 1800)
+  }
 
-        <section className="admin-stats">
-          <article><span>المسجلون</span><strong>0</strong><small>تظهر بعد ربط Supabase</small></article>
-          <article><span>متوسط الإكمال</span><strong>{state.progress}%</strong><small>بيانات المعاينة الحالية</small></article>
-          <article><span>مشاريع قيد المراجعة</span><strong>{state.projectStatus === 'submitted' ? 1 : 0}</strong><small>مشروع تجريبي</small></article>
-          <article><span>الشهادات</span><strong>{state.projectStatus === 'approved' ? 1 : 0}</strong><small>شهادة تجريبية</small></article>
-        </section>
+  const sendReply = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); if (!supabase || !selectedThread || !adminId) return
+    const body = String(new FormData(event.currentTarget).get('message') || '').trim(); if (!body) return
+    const { error } = await supabase.from('support_messages').insert({ thread_id: selectedThread, sender_id: adminId, body })
+    if (!error) event.currentTarget.reset(); else setNotice('الرد متبعتش، جرّب تاني.')
+  }
 
-        {active === 'course' ? (
-          <section className="admin-panel">
-            <div className="admin-panel-heading"><div><h2>المحاضرات الخمسة</h2><p>الصق لينك الفيديو الـUnlisted؛ السيستم هيحفظ الـVideo ID ويعرضه Embedded للطالب.</p></div><span className="status-badge">Dynamic Course</span></div>
-            <div className="admin-lessons">
-              {state.lessons.map((lesson) => (
-                <form key={lesson.id} className="admin-lesson-form" onSubmit={(event) => saveLesson(event, lesson.id)}>
-                  <div className="admin-lesson-title"><span>{lesson.position}</span><div><strong>المحاضرة {lesson.position}</strong><small>{lesson.youtubeVideoId ? 'تم ربط فيديو Unlisted' : 'في انتظار لينك الفيديو'}</small></div></div>
-                  <label>عنوان المحاضرة<input name="title" defaultValue={lesson.title} required /></label>
-                  <label>وصف مختصر<textarea name="description" defaultValue={lesson.description} rows={2} /></label>
-                  <div className="form-grid"><label>مدة الفيديو بالدقائق<input name="duration" type="number" min="1" defaultValue={lesson.durationMinutes} /></label><label>درجة النجاح<input value="70%" disabled /></label></div>
-                  <label>لينك YouTube Unlisted<input name="youtubeUrl" defaultValue={lesson.youtubeVideoId || ''} placeholder="https://youtu.be/xxxxxxxxxxx" /></label>
-                  <button className="primary-button" type="submit">{saved === lesson.id ? <><CheckCircle2 /> تم الحفظ</> : <><Save /> حفظ المحاضرة</>}</button>
-                </form>
-              ))}
-            </div>
-          </section>
-        ) : active === 'projects' ? (
-          <section className="admin-panel"><div className="admin-panel-heading"><div><h2>مشاريع التخرج</h2><p>راجع التسليمات واعتمد الشهادة بعد التأكد من التطبيق.</p></div></div>{state.projectStatus === 'submitted' ? <div className="submission-row"><div><strong>{state.profile?.fullName}</strong><span>مشروع تجريبي — قيد المراجعة</span></div><button className="primary-button" onClick={state.approveProject}>اعتماد المشروع وإصدار الشهادة</button></div> : <div className="empty-admin">لا توجد مشاريع قيد المراجعة حاليًا.</div>}</section>
-        ) : (
-          <section className="admin-panel placeholder-panel"><Settings size={42} /><h2>القسم جاهز للربط بقاعدة البيانات</h2><p>الهيكل الأساسي موجود، وهنفعّل بياناته الحقيقية في المرحلة التالية بعد إنشاء مشروع Supabase.</p></section>
-        )}
+  const logout = async () => { await supabase?.auth.signOut(); navigate('/admin-login') }
+  const sectionTitle: Record<string, string> = { dashboard: 'نظرة عامة', course: 'الكورس والمحاضرات', messages: 'رسائل الطلاب', students: 'الطلاب', projects: 'المشاريع', certificates: 'الشهادات', analytics: 'التحليلات', settings: 'الإعدادات' }
 
-        <button className="reset-demo" onClick={state.resetDemo}><RotateCcw size={16} /> تصفير بيانات المعاينة</button>
-      </main>
-    </div>
-  )
+  return <div className="admin-shell" dir="rtl">
+    <aside className="admin-sidebar"><Link className="brand" to="/"><span className="brand-mark">EO</span><span><strong>EHAB OSAMA</strong><small>ADMIN PANEL</small></span></Link><nav>
+      <button className={active === 'dashboard' ? 'active' : ''} onClick={() => setActive('dashboard')}><LayoutDashboard /> نظرة عامة</button>
+      <button className={active === 'course' ? 'active' : ''} onClick={() => setActive('course')}><BookOpen /> الكورس والمحاضرات</button>
+      <button className={active === 'messages' ? 'active' : ''} onClick={() => setActive('messages')}><MessageCircle /> الرسائل {threads.length > 0 && <b className="nav-count">{threads.length}</b>}</button>
+      <button className={active === 'students' ? 'active' : ''} onClick={() => setActive('students')}><Users /> الطلاب</button>
+      <button className={active === 'projects' ? 'active' : ''} onClick={() => setActive('projects')}><FileCheck2 /> المشاريع</button>
+      <button className={active === 'certificates' ? 'active' : ''} onClick={() => setActive('certificates')}><GraduationCap /> الشهادات</button>
+      <button className={active === 'analytics' ? 'active' : ''} onClick={() => setActive('analytics')}><BarChart3 /> التحليلات</button>
+      <button className={active === 'settings' ? 'active' : ''} onClick={() => setActive('settings')}><Settings /> الإعدادات</button>
+    </nav><button className="admin-logout" onClick={logout}><LogOut /> تسجيل الخروج</button></aside>
+    <main className="admin-main"><header className="admin-header"><div><span className="eyebrow">لوحة الإدارة المؤمّنة</span><h1>{sectionTitle[active]}</h1></div><div className="admin-header-actions"><button className="secondary-button" onClick={loadDashboard}><RefreshCw size={17}/> تحديث</button><Link className="secondary-button" to="/dashboard">معاينة كطالب</Link></div></header>
+      {notice && <div className="admin-notice">{notice}</div>}
+      {loading ? <div className="admin-panel empty-admin">جاري تحميل بيانات المنصة...</div> : <>
+        {active === 'dashboard' && <><section className="admin-stats"><article><span>المسجلون</span><strong>{studentCount}</strong><small>حساب طالب</small></article><article><span>المحاضرات المنشورة</span><strong>{lessons.filter(x => x.is_published).length}</strong><small>من أصل {lessons.length}</small></article><article><span>المحادثات</span><strong>{threads.length}</strong><small>رسائل دعم داخلية</small></article><article><span>حالة الإدارة</span><strong>مؤمّن</strong><small>bobhendam@gmail.com</small></article></section><section className="admin-panel placeholder-panel"><LayoutDashboard size={42}/><h2>أهلًا يا كابتن إيهاب</h2><p>من هنا هتدير المحتوى، الطلاب، الرسائل، المشاريع والشهادات.</p></section></>}
+        {active === 'course' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>إدارة المحاضرات الخمسة</h2><p>الصق لينك YouTube الـUnlisted وعدّل المحتوى ثم اضغط حفظ.</p></div><span className="status-badge">Supabase Live</span></div><div className="admin-lessons">{lessons.map((lesson) => <form key={lesson.id} className="admin-lesson-form" onSubmit={(event) => void saveLesson(event, lesson.id)}><div className="admin-lesson-title"><span>{lesson.position}</span><div><strong>المحاضرة {lesson.position}</strong><small>{lesson.lesson_media?.[0]?.youtube_video_id ? 'تم ربط الفيديو' : 'في انتظار الفيديو'}</small></div></div><label>العنوان<input name="title" defaultValue={lesson.title} required /></label><label>الوصف<textarea name="description" defaultValue={lesson.description} rows={2}/></label><div className="form-grid"><label>المدة بالدقائق<input name="duration" type="number" min="1" defaultValue={lesson.duration_minutes}/></label><label className="publish-check"><input name="published" type="checkbox" defaultChecked={lesson.is_published}/> منشورة للطلاب</label></div><label>لينك YouTube Unlisted<input name="youtubeUrl" defaultValue={lesson.lesson_media?.[0]?.youtube_video_id || ''} placeholder="https://youtu.be/xxxxxxxxxxx"/></label><button className="primary-button" type="submit">{saved === lesson.id ? <><CheckCircle2/> تم الحفظ</> : <><Save/> حفظ المحاضرة</>}</button></form>)}</div></section>}
+        {active === 'messages' && <section className="admin-panel chat-admin"><aside className="thread-list"><h2>المحادثات</h2>{threads.length === 0 ? <p className="muted">مفيش أسئلة لسه.</p> : threads.map((thread) => <button key={thread.id} className={selectedThread === thread.id ? 'active' : ''} onClick={() => setSelectedThread(thread.id)}><span className="thread-avatar">{thread.profiles?.full_name?.charAt(0) || 'ط'}</span><span><strong>{thread.profiles?.full_name || 'طالب'}</strong><small>{new Date(thread.last_message_at).toLocaleString('ar-EG')}</small></span></button>)}</aside><div className="admin-conversation">{!selectedThread ? <div className="chat-state"><MessageCircle/><strong>اختار محادثة</strong><span>رسائل الطالب هتظهر هنا.</span></div> : <><div className="admin-message-list">{messages.map((message) => <div key={message.id} className={`chat-bubble ${message.sender_id === adminId ? 'mine' : 'admin'}`}><p>{message.body}</p><time>{new Date(message.created_at).toLocaleString('ar-EG')}</time></div>)}</div><form onSubmit={(event) => void sendReply(event)}><input name="message" required maxLength={2000} placeholder="اكتب ردك للطالب..."/><button className="primary-button"><Send size={18}/> إرسال</button></form></>}</div></section>}
+        {active !== 'dashboard' && active !== 'course' && active !== 'messages' && <section className="admin-panel placeholder-panel"><Settings size={42}/><h2>القسم جاهز للمرحلة التالية</h2><p>هنفعّل بياناته الحقيقية بعد تثبيت الإدارة والشات وتجربتهم.</p></section>}
+      </>}
+    </main>
+  </div>
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { demoLessons } from '../data/demo'
 import type { CourseLesson, StudentProfile } from '../types'
+import { supabase } from '../lib/supabase'
 
 const LESSONS_KEY = 'eo-course-lessons'
 const PROFILE_KEY = 'eo-course-profile'
@@ -31,6 +32,37 @@ export function useCourseState() {
   }, [profile])
   useEffect(() => localStorage.setItem(SOCIAL_KEY, String(socialGateDone)), [socialGateDone])
   useEffect(() => localStorage.setItem(PROJECT_KEY, projectStatus), [projectStatus])
+
+  useEffect(() => {
+    if (!supabase || !profile) return
+    const client = supabase
+    const loadLiveLessons = async () => {
+      // Give the enrollment sync a moment to finish before protected media is read.
+      await new Promise((resolve) => window.setTimeout(resolve, 500))
+      const { data } = await client
+        .from('lessons')
+        .select('id,position,title,description,duration_minutes,lesson_media(youtube_video_id)')
+        .eq('course_id', '11111111-1111-4111-8111-111111111111')
+        .eq('is_published', true)
+        .order('position')
+      if (!data?.length) return
+      setLessons((current) => data.map((lesson) => {
+        const previous = current.find((item) => item.position === lesson.position)
+        const media = lesson.lesson_media as unknown as { youtube_video_id: string }[] | null
+        return {
+          id: lesson.id,
+          position: lesson.position,
+          title: lesson.title,
+          description: lesson.description,
+          durationMinutes: lesson.duration_minutes,
+          youtubeVideoId: media?.[0]?.youtube_video_id || '',
+          quizPassed: previous?.quizPassed || false,
+          status: previous?.quizPassed ? 'completed' : lesson.position === 1 || current.some((item) => item.position === lesson.position - 1 && item.quizPassed) ? 'available' : 'locked',
+        } as CourseLesson
+      }))
+    }
+    void loadLiveLessons()
+  }, [profile])
 
   const completedCount = lessons.filter((lesson) => lesson.quizPassed).length
   const progress = Math.round((completedCount / lessons.length) * 100)

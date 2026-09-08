@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, CheckCircle2, FileCheck2, GraduationCap, LayoutDashboard, LogOut, MessageCircle, Plus, RefreshCw, Save, Send, Settings, Trash2, Users } from 'lucide-react'
+import { BarChart3, BookOpen, CheckCircle2, FileCheck2, GraduationCap, LayoutDashboard, LogOut, MessageCircle, Pencil, Plus, RefreshCw, Save, Send, Settings, Trash2, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -9,8 +9,9 @@ type DbLesson = { id: string; position: number; title: string; description: stri
 type Thread = { id: string; user_id: string; status: string; last_message_at: string; profiles: { full_name: string; phone: string } | null }
 type ChatMessage = { id: string; sender_id: string; body: string; read_at: string | null; created_at: string }
 type DbQuizQuestion = { id: string; position: number; prompt: string; explanation: string; is_published: boolean; quiz_options: { id: string; position: number; label: string }[] | null; quiz_answer_keys: { correct_option_id: string }[] | null }
-type DbStudent = { id: string; full_name: string; phone: string; audience_role: string; goal: string; created_at: string; enrollments: { status: string; enrolled_at: string; completed_at: string | null }[] | null }
+type DbStudent = { id: string; full_name: string; phone: string; audience_role: string; goal: string; created_at: string; is_archived: boolean; enrollments: { status: string; enrolled_at: string; completed_at: string | null }[] | null }
 type DbEnrollment = { user_id: string; status: string; enrolled_at: string; completed_at: string | null }
+type QuizAttempt = { id: string; lesson_id: string; score: number; passed: boolean; correct_count: number; total_count: number; created_at: string }
 
 function extractYouTubeId(value: string) {
   const trimmed = value.trim(); if (!trimmed) return ''
@@ -27,6 +28,8 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
   const [adminId, setAdminId] = useState('')
   const [studentCount, setStudentCount] = useState(0)
   const [students, setStudents] = useState<DbStudent[]>([])
+  const [studentAttempts, setStudentAttempts] = useState<QuizAttempt[]>([])
+  const [resultsFor, setResultsFor] = useState<DbStudent | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const [replyDraft, setReplyDraft] = useState('')
   const [sendingReply, setSendingReply] = useState(false)
@@ -67,7 +70,7 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
       supabase.from('lessons').select('id,position,title,description,duration_minutes,is_published').order('position'),
       supabase.from('lesson_media').select('lesson_id,youtube_video_id'),
       supabase.from('support_threads').select('id,user_id,status,last_message_at,profiles(full_name,phone)').order('last_message_at', { ascending: false }),
-      supabase.from('profiles').select('id,full_name,phone,audience_role,goal,created_at,role').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id,full_name,phone,audience_role,goal,created_at,role,is_archived').order('created_at', { ascending: false }),
       supabase.from('enrollments').select('user_id,status,enrolled_at,completed_at'),
     ])
     setAdminId(auth.user?.id || '')
@@ -76,7 +79,7 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
     setLessons((dbLessons || []).map((lesson) => ({ ...lesson, lesson_media: mediaByLesson.has(lesson.id) ? [{ youtube_video_id: mediaByLesson.get(lesson.id) || '' }] : null })) as DbLesson[])
     setThreads((dbThreads || []) as unknown as Thread[])
     const enrollmentByUser = new Map((dbEnrollments || []).map((enrollment) => [enrollment.user_id, enrollment as DbEnrollment]))
-    const liveStudents = (dbProfiles || []).filter((profile) => profile.role !== 'admin').map((profile) => ({ ...profile, enrollments: enrollmentByUser.has(profile.id) ? [enrollmentByUser.get(profile.id)!] : [] })) as DbStudent[]
+    const liveStudents = (dbProfiles || []).filter((profile) => profile.role !== 'admin' && !profile.is_archived).map((profile) => ({ ...profile, enrollments: enrollmentByUser.has(profile.id) ? [enrollmentByUser.get(profile.id)!] : [] })) as DbStudent[]
     setStudentCount(liveStudents.length)
     setStudents(liveStudents)
     setLoading(false)
@@ -157,6 +160,31 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
     await loadQuiz(quizLesson)
   }
 
+  const editStudentName = async (student: DbStudent) => {
+    if (!supabase) return
+    const fullName = window.prompt('اكتب الاسم الجديد للطالب:', student.full_name || '')?.trim()
+    if (!fullName || fullName === student.full_name) return
+    const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('id', student.id)
+    if (error) { setNotice('تعذر تعديل الاسم. راجع صلاحية الإدارة.'); return }
+    setNotice('تم تعديل اسم الطالب.'); await loadDashboard()
+  }
+
+  const archiveStudent = async (student: DbStudent) => {
+    if (!supabase || !window.confirm(`حذف «${student.full_name || 'هذا الطالب'}» من قائمة الطلاب؟ بياناته ونتائجه ستبقى محفوظة.`)) return
+    const { error } = await supabase.from('profiles').update({ is_archived: true }).eq('id', student.id)
+    if (error) { setNotice('تعذر حذف الطالب من القائمة.'); return }
+    if (resultsFor?.id === student.id) { setResultsFor(null); setStudentAttempts([]) }
+    setNotice('تم حذف الطالب من القائمة مع الاحتفاظ بسجله.'); await loadDashboard()
+  }
+
+  const viewStudentResults = async (student: DbStudent) => {
+    if (!supabase) return
+    setResultsFor(student); setStudentAttempts([])
+    const { data, error } = await supabase.from('quiz_attempts').select('id,lesson_id,score,passed,correct_count,total_count,created_at').eq('user_id', student.id).order('created_at', { ascending: false })
+    if (error) { setNotice('تعذر تحميل نتائج الاختبارات.'); return }
+    setStudentAttempts((data || []) as QuizAttempt[])
+  }
+
   const saveLesson = async (event: FormEvent<HTMLFormElement>, lessonId: string) => {
     event.preventDefault(); if (!supabase) return
     const form = new FormData(event.currentTarget)
@@ -198,7 +226,7 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
         {active === 'course' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>إدارة المحاضرات</h2><p>أضف أو احذف محاضرات، والصق لينك YouTube الـUnlisted ثم احفظ.</p></div><div><button className="primary-button" type="button" onClick={() => void addLesson()} disabled={addingLesson}><Plus/> {addingLesson ? 'جاري الإضافة...' : 'إضافة محاضرة'}</button> <span className="status-badge">Supabase Live</span></div></div><div className="admin-lessons">{lessons.map((lesson) => <form key={lesson.id} className="admin-lesson-form" onChange={(event) => queueAutoSave("lesson", lesson.id, event.currentTarget)} onSubmit={(event) => void saveLesson(event, lesson.id)}><div className="admin-lesson-title"><span>{lesson.position}</span><div><strong>المحاضرة {lesson.position}</strong><small>{lesson.lesson_media?.[0]?.youtube_video_id ? 'تم ربط الفيديو' : 'في انتظار الفيديو'}</small></div></div><label>العنوان<input name="title" defaultValue={lesson.title} required /></label><label>الوصف<textarea name="description" defaultValue={lesson.description} rows={2}/></label><div className="form-grid"><label>المدة بالدقائق<input name="duration" type="number" min="1" defaultValue={lesson.duration_minutes}/></label><label className="publish-check"><input name="published" type="checkbox" defaultChecked={lesson.is_published}/> منشورة للطلاب</label></div><label>لينك YouTube Unlisted<input name="youtubeUrl" defaultValue={lesson.lesson_media?.[0]?.youtube_video_id || ''} placeholder="https://youtu.be/xxxxxxxxxxx"/></label><div className="lesson-actions"><button className="primary-button" type="submit">{saved === lesson.id ? <><CheckCircle2/> تم الحفظ</> : <><Save/> حفظ المحاضرة</>}</button><button className="secondary-button" type="button" onClick={() => void loadQuiz(lesson)}>تعديل الاختبار</button><button className="danger-button" type="button" onClick={() => void deleteLesson(lesson)}><Trash2/> حذف</button></div></form>)}</div></section>}
         {active === 'quiz' && quizLesson && <section className="admin-panel quiz-manager"><div className="admin-panel-heading"><div><h2>اختبار: {quizLesson.title}</h2><p>أضف أسئلة، عدّل الاختيارات، وحدد الإجابة الصحيحة.</p></div><div><button className="primary-button" type="button" onClick={() => void addQuizQuestion()}><Plus/> إضافة سؤال</button><button className="secondary-button" type="button" onClick={() => { setQuizLesson(null); setActive('course') }}>العودة للمحاضرات</button></div></div>{quizLoading ? <div className="chat-state">جاري تحميل الأسئلة...</div> : quizQuestions.length === 0 ? <div className="chat-state"><strong>لا توجد أسئلة بعد</strong><span>اضغط إضافة سؤال لبدء الاختبار.</span></div> : <div className="quiz-admin-list">{quizQuestions.map((question, number) => <form key={question.id} className="admin-lesson-form quiz-admin-form" onChange={(event) => queueAutoSave("quiz", question.id, event.currentTarget)} onSubmit={(event) => void saveQuizQuestion(event, question)}><div className="admin-lesson-title"><span>{number + 1}</span><strong>السؤال {number + 1}</strong></div><label>نص السؤال<input name="prompt" defaultValue={question.prompt} required /></label><label>تفسير الإجابة بعد التصحيح<textarea name="explanation" defaultValue={question.explanation} rows={2}/></label><div className="quiz-option-fields">{(question.quiz_options || []).sort((x, y) => x.position - y.position).map((option, index) => <label key={option.id}>اختيار {index + 1}<input name={`option-${option.id}`} defaultValue={option.label} required /></label>)}</div><div className="form-grid"><label>الإجابة الصحيحة<select name="answer" defaultValue={question.quiz_answer_keys?.[0]?.correct_option_id || question.quiz_options?.[0]?.id}>{(question.quiz_options || []).sort((x, y) => x.position - y.position).map((option, index) => <option key={option.id} value={option.id}>اختيار {index + 1}</option>)}</select></label><label className="publish-check"><input name="published" type="checkbox" defaultChecked={question.is_published}/> ظاهر للطلاب</label></div><div className="lesson-actions"><button className="primary-button" type="submit"><Save/> حفظ السؤال</button><button className="danger-button" type="button" onClick={() => void deleteQuizQuestion(question)}><Trash2/> حذف السؤال</button></div></form>)}</div>}</section>}
         {active === 'messages' && <section className="admin-panel chat-admin"><aside className="thread-list"><h2>المحادثات</h2>{threads.length === 0 ? <p className="muted">مفيش أسئلة لسه.</p> : threads.map((thread) => <button key={thread.id} className={selectedThread === thread.id ? 'active' : ''} onClick={() => setSelectedThread(thread.id)}><span className="thread-avatar">{thread.profiles?.full_name?.charAt(0) || 'ط'}</span><span><strong>{thread.profiles?.full_name || 'طالب'}</strong><small>{new Date(thread.last_message_at).toLocaleString('ar-EG')}</small></span></button>)}</aside><div className="admin-conversation">{!selectedThread ? <div className="chat-state"><MessageCircle/><strong>اختار محادثة</strong><span>رسائل الطالب هتظهر هنا.</span></div> : <><div className="conversation-title"><strong>{threads.find((thread) => thread.id === selectedThread)?.profiles?.full_name || 'طالب'}</strong><small>{threads.find((thread) => thread.id === selectedThread)?.profiles?.phone || ''}</small></div><div className="admin-message-list">{messages.map((message) => <div key={message.id} className={`chat-bubble ${message.sender_id === adminId ? 'mine' : 'admin'}`}><p>{message.body}</p><time>{new Date(message.created_at).toLocaleString('ar-EG')}</time></div>)}</div><form onSubmit={(event) => void sendReply(event)}><input name="message" value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} required maxLength={2000} placeholder="اكتب ردك للطالب..."/><button className="primary-button" disabled={sendingReply || !replyDraft.trim()}><Send size={18}/> {sendingReply ? 'جاري الإرسال...' : 'إرسال'}</button></form></>}</div></section>}
-        {active === 'students' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>الطلاب المسجلون</h2><p>بيانات حقيقية من الحسابات المسجلة في المنصة.</p></div><strong>{students.length} طالب</strong></div>{students.length === 0 ? <div className="chat-state"><Users/><strong>لسه مفيش طلاب مسجلين</strong><span>أول ما طالب يعمل حساب، بياناته هتظهر هنا تلقائيًا.</span></div> : <div className="student-table-wrap"><table className="student-table"><thead><tr><th>الطالب</th><th>الهاتف</th><th>الصفة / الهدف</th><th>حالة الاشتراك</th><th>تاريخ التسجيل</th></tr></thead><tbody>{students.map((student) => { const enrollment = student.enrollments?.[0]; return <tr key={student.id}><td><strong>{student.full_name || 'بدون اسم'}</strong></td><td dir="ltr">{student.phone || '—'}</td><td>{[student.audience_role, student.goal].filter(Boolean).join(' — ') || '—'}</td><td><span className="status-badge">{enrollment?.status === 'completed' ? 'مكتمل' : enrollment?.status === 'suspended' ? 'موقوف' : enrollment ? 'نشط' : 'لم يبدأ'}</span></td><td>{new Date(student.created_at).toLocaleDateString('ar-EG')}</td></tr> })}</tbody></table></div>}</section>}
+        {active === 'students' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>الطلاب المسجلون</h2><p>عدّل الاسم، احذف الطالب من القائمة، أو راجع كل محاولات الاختبار.</p></div><strong>{students.length} طالب</strong></div>{students.length === 0 ? <div className="chat-state"><Users/><strong>لسه مفيش طلاب مسجلين</strong><span>أول ما طالب يعمل حساب، بياناته هتظهر هنا تلقائيًا.</span></div> : <div className="student-table-wrap"><table className="student-table"><thead><tr><th>الطالب</th><th>الهاتف</th><th>الصفة / الهدف</th><th>حالة الاشتراك</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr></thead><tbody>{students.map((student) => { const enrollment = student.enrollments?.[0]; return <tr key={student.id}><td><strong>{student.full_name || 'بدون اسم'}</strong></td><td dir="ltr">{student.phone || '—'}</td><td>{[student.audience_role, student.goal].filter(Boolean).join(' — ') || '—'}</td><td><span className="status-badge">{enrollment?.status === 'completed' ? 'مكتمل' : enrollment?.status === 'suspended' ? 'موقوف' : enrollment ? 'نشط' : 'لم يبدأ'}</span></td><td>{new Date(student.created_at).toLocaleDateString('ar-EG')}</td><td><div className="student-actions"><button className="secondary-button compact-button" type="button" onClick={() => void editStudentName(student)}><Pencil size={15}/> تعديل</button><button className="secondary-button compact-button" type="button" onClick={() => void viewStudentResults(student)}>النتائج</button><button className="danger-button compact-button" type="button" onClick={() => void archiveStudent(student)}><Trash2 size={15}/> حذف</button></div></td></tr> })}</tbody></table></div>}{resultsFor && <section className="quiz-results"><div className="admin-panel-heading"><div><h2>نتائج اختبارات: {resultsFor.full_name || 'الطالب'}</h2><p>كل محاولة محفوظة باسم المحاضرة والدرجة وعدد الإجابات الصحيحة.</p></div><button className="secondary-button" type="button" onClick={() => { setResultsFor(null); setStudentAttempts([]) }}>إغلاق</button></div>{studentAttempts.length === 0 ? <p className="muted">لم يرسل هذا الطالب أي اختبار حتى الآن.</p> : <div className="student-table-wrap"><table className="student-table"><thead><tr><th>المحاضرة</th><th>النتيجة</th><th>الإجابات الصحيحة</th><th>الحالة</th><th>وقت المحاولة</th></tr></thead><tbody>{studentAttempts.map((attempt) => <tr key={attempt.id}><td>{lessons.find((lesson) => lesson.id === attempt.lesson_id)?.title || 'محاضرة محذوفة'}</td><td>{Math.round(attempt.score)}%</td><td>{attempt.correct_count} من {attempt.total_count}</td><td><span className="status-badge">{attempt.passed ? 'ناجح' : 'لم يجتز'}</span></td><td>{new Date(attempt.created_at).toLocaleString('ar-EG')}</td></tr>)}</tbody></table></div>}</section>}</section>}
         {active !== 'dashboard' && active !== 'course' && active !== 'messages' && active !== 'students' && active !== 'quiz' && <section className="admin-panel placeholder-panel"><Settings size={42}/><h2>القسم جاهز للمرحلة التالية</h2><p>هنفعّل بياناته الحقيقية بعد تثبيت الإدارة والشات وتجربتهم.</p></section>}
       </>}
     </main>

@@ -11,8 +11,9 @@ type QuizResult = { score: number; passed: boolean; correctCount: number; totalC
 export function LessonPage({ state }: { state: CourseState }) {
   const { lessonId } = useParams()
   const lesson = state.lessons.find((item) => item.id === lessonId)
-  const [watched, setWatched] = useState(Boolean(lesson?.quizPassed))
-  const [watching, setWatching] = useState(false)
+  const [watchedSeconds, setWatchedSeconds] = useState(0)
+  const [requiredSeconds, setRequiredSeconds] = useState(0)
+  const [durationSeconds, setDurationSeconds] = useState(Math.max(lesson?.durationMinutes || 1, 1) * 60)
   const [videoId, setVideoId] = useState(lesson?.youtubeVideoId || '')
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [questionsLoading, setQuestionsLoading] = useState(false)
@@ -22,11 +23,42 @@ export function LessonPage({ state }: { state: CourseState }) {
   const nextLesson = useMemo(() => state.lessons.find((item) => item.position === (lesson?.position || 0) + 1), [state.lessons, lesson])
 
   useEffect(() => {
-    setWatched(Boolean(lesson?.quizPassed))
+    setWatchedSeconds(lesson?.quizPassed ? Math.max(lesson.durationMinutes, 1) * 60 : 0)
+    setRequiredSeconds(Math.ceil(Math.max(lesson?.durationMinutes || 1, 1) * 60 * .85))
+    setDurationSeconds(Math.max(lesson?.durationMinutes || 1, 1) * 60)
     setVideoId(lesson?.youtubeVideoId || '')
     setResult(null)
     setSelected({})
   }, [lesson?.id])
+
+  const watched = watchedSeconds >= requiredSeconds && requiredSeconds > 0
+
+  useEffect(() => {
+    if (!supabase || !lesson) return
+    const client = supabase
+    const loadProgress = async () => {
+      const { data } = await client.from('lesson_progress').select('watched_seconds').eq('lesson_id', lesson.id).maybeSingle()
+      if (data?.watched_seconds) setWatchedSeconds(data.watched_seconds)
+    }
+    void loadProgress()
+  }, [lesson?.id])
+
+  useEffect(() => {
+    if (!supabase || !lesson || watched) return
+    const client = supabase
+    const recordWatch = async () => {
+      if (document.visibilityState !== 'visible') return
+      const { data, error: watchError } = await client.rpc('record_lesson_watch', { p_lesson_id: lesson.id, p_increment_seconds: 10 })
+      if (watchError || !data) return
+      const progress = data as { watchedSeconds: number; durationSeconds: number; requiredSeconds: number }
+      setWatchedSeconds(progress.watchedSeconds)
+      setDurationSeconds(progress.durationSeconds)
+      setRequiredSeconds(progress.requiredSeconds)
+    }
+    void recordWatch()
+    const timer = window.setInterval(() => { void recordWatch() }, 10000)
+    return () => window.clearInterval(timer)
+  }, [lesson?.id, watched])
 
   useEffect(() => {
     if (!supabase || !lesson) return
@@ -54,16 +86,6 @@ export function LessonPage({ state }: { state: CourseState }) {
   if (!lesson) return <Navigate to="/dashboard" replace />
   if (lesson.status === 'locked') return <div className="empty-state"><LockKeyhole /><h1>المحاضرة لسه مقفولة</h1><p>انجح في اختبار المحاضرة السابقة الأول.</p><Link className="secondary-button" to="/dashboard">الرجوع للرئيسية</Link></div>
 
-  const markWatched = async () => {
-    if (watched || watching) return
-    if (!supabase) { setError('إعدادات المنصة غير مكتملة.'); return }
-    setWatching(true); setError('')
-    const { error } = await supabase.rpc('mark_lesson_watched', { p_lesson_id: lesson.id })
-    setWatching(false)
-    if (error) { setError('تعذر تسجيل المشاهدة. تأكد إنك مسجل دخول ثم جرّب مرة أخرى.'); return }
-    setWatched(true)
-  }
-
   const submitQuiz = async (event: FormEvent) => {
     event.preventDefault()
     if (!supabase || !questions.length) return
@@ -84,11 +106,11 @@ export function LessonPage({ state }: { state: CourseState }) {
 
       {videoId ? <div className="video-frame"><iframe src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`} title={lesson.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div> : <div className="video-empty"><PlayCircle size={64} /><h2>الفيديو لم يُضف بعد</h2><p>الأدمن يضيف لينك YouTube من لوحة الإدارة.</p></div>}
 
-      <button className="primary-button watched-button" onClick={() => void markWatched()} disabled={watched || watching}>{watching ? <><Loader2 className="spin"/> جاري الحفظ...</> : watched ? <><CheckCircle2 /> تم إتمام مشاهدة المحاضرة</> : <>أتممت مشاهدة الفيديو <ArrowLeft /></>}</button>
+      <section className="lesson-watch-progress" aria-live="polite"><div><strong>{watched ? 'أكملت الحد المطلوب للمشاهدة' : `تقدم المشاهدة ${Math.min(100, Math.floor((watchedSeconds / Math.max(durationSeconds, 1)) * 100))}%`}</strong><span>{watched ? 'الاختبار مفتوح الآن.' : 'يلزم إكمال 85% لفتح الاختبار والمحاضرة التالية.'}</span></div><div className="watch-track"><i style={{ width: `${Math.min(100, (watchedSeconds / Math.max(durationSeconds, 1)) * 100)}%` }} /></div></section>
 
       <section className={`quiz-section ${watched ? '' : 'disabled-section'}`}>
         <div className="section-heading"><div><span className="eyebrow">اختبار المحاضرة</span><h2>اتأكد إن المعلومة وصلت</h2><p>الاختبار بيتعدل من لوحة الإدارة ونتيجته محفوظة في حسابك.</p></div><span className="score-rule">درجة النجاح 70%</span></div>
-        {questionsLoading ? <div className="chat-state"><Loader2 className="spin"/> جاري تحميل الاختبار...</div> : !watched ? <p className="muted">أكمل مشاهدة المحاضرة أولًا لفتح الاختبار.</p> : questions.length === 0 ? <p className="muted">الاختبار لم يُضف بعد لهذه المحاضرة.</p> : <form onSubmit={(event) => void submitQuiz(event)}>
+        {questionsLoading ? <div className="chat-state"><Loader2 className="spin"/> جاري تحميل الاختبار...</div> : !watched ? <p className="muted">الاختبار مقفل حتى تصل إلى 85% من مدة المحاضرة.</p> : questions.length === 0 ? <p className="muted">الاختبار لم يُضف بعد لهذه المحاضرة.</p> : <form onSubmit={(event) => void submitQuiz(event)}>
           <fieldset disabled={Boolean(result?.passed)}>
             {questions.map((question, index) => <div className="quiz-question" key={question.id}><legend>{index + 1}. {question.prompt}</legend><div className="quiz-options">{(question.quiz_options || []).sort((a, b) => a.position - b.position).map((option) => <label key={option.id} className={selected[question.id] === option.id ? 'selected' : ''}><input type="radio" name={question.id} value={option.id} checked={selected[question.id] === option.id} onChange={() => setSelected((current) => ({ ...current, [question.id]: option.id }))} /><span>{option.label}</span></label>)}</div></div>)}
           </fieldset>

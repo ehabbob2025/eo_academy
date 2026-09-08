@@ -339,5 +339,15 @@ textarea { resize: vertical; }
 .student-table td { color: var(--ink); font-size: .93rem; }
 .student-table tbody tr:hover { background: #fbfcf8; }
 
+.lesson-watch-progress { margin: 18px 0 24px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 14px; background: #fffdf7; }
+.lesson-watch-progress > div:first-child { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 10px; }
+.lesson-watch-progress strong { color: var(--green); }
+.lesson-watch-progress span { color: var(--muted); font-size: .88rem; }
+.watch-track { height: 9px; border-radius: 99px; background: #e7ece8; overflow: hidden; }
+.watch-track i { display: block; height: 100%; background: linear-gradient(90deg, var(--green), var(--gold)); border-radius: inherit; transition: width .35s ease; }
+.student-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+.compact-button { padding: 8px 10px; font-size: .8rem; min-height: auto; }
+.quiz-results { margin-top: 26px; padding-top: 24px; border-top: 1px solid var(--border); }
+
 .student-logout { border: 0; background: transparent; color: #b8cec5; padding: 6px; cursor: pointer; border-radius: 8px; }
 .student-logout:hover { color: var(--gold); background: rgba(255,255,255,.08); }

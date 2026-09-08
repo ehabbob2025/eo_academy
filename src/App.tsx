@@ -3,9 +3,9 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { course } from './data/demo'
 import { useCourseState } from './hooks/useCourseState'
-import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { isSupabaseConfigured, isRecoveryRedirect, supabase } from './lib/supabase'
 import { AdminPage } from './pages/AdminPage'
-import { AdminLoginPage } from './pages/AdminLoginPage'
+import { AdminLoginPage, PasswordResetPage } from './pages/AdminLoginPage'
 import { CertificatePage } from './pages/CertificatePage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LandingPage } from './pages/LandingPage'
@@ -43,6 +43,13 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
 
 function App() {
   const state = useCourseState()
+  const [recovering, setRecovering] = useState(isRecoveryRedirect)
+  useEffect(() => {
+    const subscription = supabase?.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true)
+    })
+    return () => subscription?.data.subscription.unsubscribe()
+  }, [])
 
   useEffect(() => {
     if (!supabase || !state.profile) return
@@ -68,7 +75,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
+      {recovering ? <PasswordResetPage onComplete={() => setRecovering(false)} /> : <Routes>
         <Route path="/" element={<LandingPage course={course} />} />
         <Route path="/register" element={<RegisterPage state={state} />} />
         <Route path="/follow" element={<SocialGatePage state={state} />} />
@@ -78,10 +85,11 @@ function App() {
           <Route path="/project" element={<ProjectPage state={state} />} />
           <Route path="/certificate" element={<CertificatePage state={state} />} />
         </Route>
+        <Route path="/reset-password" element={<PasswordResetPage />} />
         <Route path="/admin-login" element={<AdminLoginPage />} />
         <Route path="/admin" element={<AdminGuard><AdminPage state={state} /></AdminGuard>} />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      </Routes>}
       {!isSupabaseConfigured && <div className="demo-ribbon">وضع المعاينة — اربط Supabase لتفعيل الحسابات الحقيقية</div>}
     </BrowserRouter>
   )

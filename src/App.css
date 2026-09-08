@@ -13,6 +13,10 @@
 .secondary-button { background: var(--white); color: var(--emerald-900); border: 1px solid var(--border); }
 .primary-button:hover, .secondary-button:hover { transform: translateY(-1px); }
 .full-button { width: 100%; }
+.google-button { width: 100%; min-height: 50px; margin-top: 20px; border: 1px solid var(--border); border-radius: 12px; padding: 11px 16px; display: flex; align-items: center; justify-content: center; gap: 11px; background: var(--white); color: var(--emerald-950); font-weight: 800; box-shadow: 0 8px 24px rgba(8,40,31,.08); }
+.google-button:hover { border-color: var(--gold); background: #fffdf5; }
+.google-button:disabled { opacity: .6; }
+.google-mark { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; color: #4285f4; background: #f2f6ff; font-family: Arial, sans-serif; font-size: 1rem; font-weight: 800; }
 .status-badge { display: inline-flex; border-radius: 999px; background: rgba(201,162,39,.14); color: #8a6b0f; padding: 6px 11px; font-size: .75rem; font-weight: 700; }
 .demo-ribbon { position: fixed; z-index: 100; inset-inline: 18px auto; bottom: 16px; background: var(--emerald-950); color: var(--white); border: 1px solid rgba(201,162,39,.5); border-radius: 9px; padding: 8px 12px; font-size: .72rem; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
 

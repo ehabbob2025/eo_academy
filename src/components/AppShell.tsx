@@ -1,9 +1,9 @@
-import { Award, BookOpen, FolderCheck, Home, LogOut } from 'lucide-react'
+import { Award, FolderCheck, Home, LogOut } from 'lucide-react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import type { StudentProfile } from '../types'
 import { SupportChat } from './SupportChat'
 
-export function AppShell({ profile, progress }: { profile: StudentProfile | null; progress: number }) {
+export function AppShell({ profile, progress, onLogout }: { profile: StudentProfile | null; progress: number; onLogout: () => void }) {
   return (
     <div className="app-shell" dir="rtl">
       <aside className="sidebar">
@@ -13,7 +13,6 @@ export function AppShell({ profile, progress }: { profile: StudentProfile | null
         </Link>
         <nav className="side-nav" aria-label="التنقل الرئيسي">
           <NavLink to="/dashboard"><Home size={19} /> الرئيسية</NavLink>
-          <NavLink to="/lesson/lesson-1"><BookOpen size={19} /> المحاضرات</NavLink>
           <NavLink to="/project"><FolderCheck size={19} /> مشروع التخرج</NavLink>
           <NavLink to="/certificate"><Award size={19} /> الشهادة</NavLink>
         </nav>
@@ -24,7 +23,7 @@ export function AppShell({ profile, progress }: { profile: StudentProfile | null
         <div className="student-mini">
           <div className="avatar">{profile?.fullName?.charAt(0) || 'ط'}</div>
           <div><strong>{profile?.fullName || 'طالب EO'}</strong><small>{profile?.email}</small></div>
-          <LogOut size={18} aria-label="تسجيل الخروج" />
+          <button className="student-logout" onClick={onLogout} aria-label="تسجيل الخروج" title="تسجيل الخروج"><LogOut size={18} /></button>
         </div>
       </aside>
       <main className="app-main"><Outlet /></main>

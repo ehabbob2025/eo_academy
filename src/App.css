@@ -233,7 +233,7 @@ textarea { resize: vertical; }
 .publish-check input { width: 18px; height: 18px; accent-color: var(--emerald-900); }
 
 /* Student support chat */
-.support-widget { position: fixed; z-index: 90; inset-inline-start: 22px; bottom: 22px; }
+.support-widget { position: fixed; z-index: 90; inset-inline-end: 22px; inset-inline-start: auto; bottom: 22px; }
 .support-launcher { min-height: 52px; border: 0; border-radius: 999px; padding: 0 19px; display: flex; align-items: center; gap: 8px; background: var(--gold); color: var(--emerald-950); font-weight: 800; box-shadow: 0 14px 35px rgba(8,40,31,.25); }
 .support-window { width: min(370px, calc(100vw - 28px)); height: min(540px, calc(100vh - 45px)); display: grid; grid-template-rows: auto 1fr auto auto; overflow: hidden; border-radius: 18px; background: var(--white); border: 1px solid var(--border); box-shadow: 0 24px 70px rgba(8,40,31,.3); }
 .support-window header { padding: 16px; display: flex; align-items: center; justify-content: space-between; color: var(--white); background: var(--emerald-950); }
@@ -338,3 +338,6 @@ textarea { resize: vertical; }
 .student-table th { color: var(--muted); font-size: .86rem; font-weight: 700; }
 .student-table td { color: var(--ink); font-size: .93rem; }
 .student-table tbody tr:hover { background: #fbfcf8; }
+
+.student-logout { border: 0; background: transparent; color: #b8cec5; padding: 6px; cursor: pointer; border-radius: 8px; }
+.student-logout:hover { color: var(--gold); background: rgba(255,255,255,.08); }

@@ -43,6 +43,10 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
 
 function App() {
   const state = useCourseState()
+  const logoutStudent = async () => {
+    await supabase?.auth.signOut({ scope: 'local' })
+    state.resetDemo()
+  }
   const [recovering, setRecovering] = useState(isRecoveryRedirect)
   useEffect(() => {
     const subscription = supabase?.auth.onAuthStateChange((event) => {
@@ -79,7 +83,7 @@ function App() {
         <Route path="/" element={<LandingPage course={course} />} />
         <Route path="/register" element={<RegisterPage state={state} />} />
         <Route path="/follow" element={<SocialGatePage state={state} />} />
-        <Route element={<StudentGuard state={state}><AppShell profile={state.profile} progress={state.progress} /></StudentGuard>}>
+        <Route element={<StudentGuard state={state}><AppShell profile={state.profile} progress={state.progress} onLogout={() => void logoutStudent()} /></StudentGuard>}>
           <Route path="/dashboard" element={<DashboardPage state={state} />} />
           <Route path="/lesson/:lessonId" element={<LessonPage state={state} />} />
           <Route path="/project" element={<ProjectPage state={state} />} />

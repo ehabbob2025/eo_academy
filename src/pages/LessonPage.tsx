@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, Loader2, LockKeyhole, PlayCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import type { CourseState } from '../App'
 import { supabase } from '../lib/supabase'
 
@@ -51,7 +51,7 @@ export function LessonPage({ state }: { state: CourseState }) {
     void loadQuestions()
   }, [lesson?.id, watched])
 
-  if (!lesson) return <div className="empty-state"><CircleAlert /><h1>المحاضرة غير موجودة</h1><Link to="/dashboard">الرجوع للرئيسية</Link></div>
+  if (!lesson) return <Navigate to="/dashboard" replace />
   if (lesson.status === 'locked') return <div className="empty-state"><LockKeyhole /><h1>المحاضرة لسه مقفولة</h1><p>انجح في اختبار المحاضرة السابقة الأول.</p><Link className="secondary-button" to="/dashboard">الرجوع للرئيسية</Link></div>
 
   const markWatched = async () => {

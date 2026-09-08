@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 type DbLesson = { id: string; position: number; title: string; description: string; duration_minutes: number; is_published: boolean; lesson_media: { youtube_video_id: string }[] | null }
 type Thread = { id: string; user_id: string; status: string; last_message_at: string; profiles: { full_name: string; phone: string } | null }
 type ChatMessage = { id: string; sender_id: string; body: string; read_at: string | null; created_at: string }
+type DbQuizQuestion = { id: string; position: number; prompt: string; explanation: string; is_published: boolean; quiz_options: { id: string; position: number; label: string }[] | null; quiz_answer_keys: { correct_option_id: string }[] | null }
 type DbStudent = { id: string; full_name: string; phone: string; audience_role: string; goal: string; created_at: string; enrollments: { status: string; enrolled_at: string; completed_at: string | null }[] | null }
 
 function extractYouTubeId(value: string) {
@@ -29,6 +30,9 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
   const [replyDraft, setReplyDraft] = useState('')
   const [sendingReply, setSendingReply] = useState(false)
   const [addingLesson, setAddingLesson] = useState(false)
+  const [quizLesson, setQuizLesson] = useState<DbLesson | null>(null)
+  const [quizQuestions, setQuizQuestions] = useState<DbQuizQuestion[]>([])
+  const [quizLoading, setQuizLoading] = useState(false)
   const [saved, setSaved] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
@@ -89,6 +93,48 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
     setNotice('تم حذف المحاضرة.'); await loadDashboard()
   }
 
+  const loadQuiz = async (lesson: DbLesson) => {
+    if (!supabase) return
+    setQuizLesson(lesson); setQuizLoading(true)
+    const { data, error } = await supabase.from('quiz_questions').select('id,position,prompt,explanation,is_published,quiz_options(id,position,label),quiz_answer_keys(correct_option_id)').eq('lesson_id', lesson.id).order('position')
+    if (error) setNotice('تعذر تحميل الاختبار.')
+    setQuizQuestions((data || []) as unknown as DbQuizQuestion[])
+    setQuizLoading(false)
+  }
+
+  const addQuizQuestion = async () => {
+    if (!supabase || !quizLesson) return
+    const position = (quizQuestions.reduce((max, question) => Math.max(max, question.position), 0) || 0) + 1
+    const { data: question, error } = await supabase.from('quiz_questions').insert({ lesson_id: quizLesson.id, position, prompt: 'سؤال جديد', explanation: '', is_published: true }).select('id').single()
+    if (error || !question) { setNotice('تعذرت إضافة السؤال.'); return }
+    const labels = ['اختيار 1', 'اختيار 2', 'اختيار 3', 'اختيار 4']
+    const { data: options, error: optionsError } = await supabase.from('quiz_options').insert(labels.map((label, index) => ({ question_id: question.id, position: index + 1, label }))).select('id,position,label')
+    if (optionsError || !options?.length) { setNotice('تم إنشاء السؤال لكن تعذر إضافة الاختيارات.'); return }
+    await supabase.from('quiz_answer_keys').upsert({ question_id: question.id, correct_option_id: options[0].id })
+    await loadQuiz(quizLesson)
+  }
+
+  const saveQuizQuestion = async (event: FormEvent<HTMLFormElement>, question: DbQuizQuestion) => {
+    event.preventDefault(); if (!supabase || !quizLesson) return
+    const client = supabase
+    const form = new FormData(event.currentTarget)
+    const { error: questionError } = await client.from('quiz_questions').update({ prompt: String(form.get('prompt') || '').trim(), explanation: String(form.get('explanation') || '').trim(), is_published: form.get('published') === 'on' }).eq('id', question.id)
+    const options = question.quiz_options || []
+    const updates = await Promise.all(options.map((option) => client.from('quiz_options').update({ label: String(form.get(`option-${option.id}`) || '').trim() }).eq('id', option.id)))
+    const answerId = String(form.get('answer') || '')
+    const { error: keyError } = await client.from('quiz_answer_keys').upsert({ question_id: question.id, correct_option_id: answerId })
+    if (questionError || updates.some((result) => result.error) || keyError) { setNotice('حفظ السؤال فشل. راجع البيانات وحاول تاني.'); return }
+    setNotice('تم حفظ الاختبار للطلاب.'); await loadQuiz(quizLesson)
+  }
+
+  const deleteQuizQuestion = async (question: DbQuizQuestion) => {
+    if (!supabase || !quizLesson) return
+    if (!window.confirm('حذف السؤال بكل اختياراته نهائيًا؟')) return
+    const { error } = await supabase.from('quiz_questions').delete().eq('id', question.id)
+    if (error) { setNotice('الحذف فشل.'); return }
+    await loadQuiz(quizLesson)
+  }
+
   const saveLesson = async (event: FormEvent<HTMLFormElement>, lessonId: string) => {
     event.preventDefault(); if (!supabase) return
     const form = new FormData(event.currentTarget)
@@ -126,7 +172,8 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
       {notice && <div className="admin-notice">{notice}</div>}
       {loading ? <div className="admin-panel empty-admin">جاري تحميل بيانات المنصة...</div> : <>
         {active === 'dashboard' && <><section className="admin-stats"><article><span>المسجلون</span><strong>{studentCount}</strong><small>حساب طالب</small></article><article><span>المحاضرات المنشورة</span><strong>{lessons.filter(x => x.is_published).length}</strong><small>من أصل {lessons.length}</small></article><article><span>المحادثات</span><strong>{threads.length}</strong><small>رسائل دعم داخلية</small></article><article><span>حالة الإدارة</span><strong>مؤمّن</strong><small>bobhendam@gmail.com</small></article></section><section className="admin-panel placeholder-panel"><LayoutDashboard size={42}/><h2>أهلًا يا كابتن إيهاب</h2><p>من هنا هتدير المحتوى، الطلاب، الرسائل، المشاريع والشهادات.</p></section></>}
-        {active === 'course' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>إدارة المحاضرات</h2><p>أضف أو احذف محاضرات، والصق لينك YouTube الـUnlisted ثم احفظ.</p></div><div><button className="primary-button" type="button" onClick={() => void addLesson()} disabled={addingLesson}><Plus/> {addingLesson ? 'جاري الإضافة...' : 'إضافة محاضرة'}</button> <span className="status-badge">Supabase Live</span></div></div><div className="admin-lessons">{lessons.map((lesson) => <form key={lesson.id} className="admin-lesson-form" onSubmit={(event) => void saveLesson(event, lesson.id)}><div className="admin-lesson-title"><span>{lesson.position}</span><div><strong>المحاضرة {lesson.position}</strong><small>{lesson.lesson_media?.[0]?.youtube_video_id ? 'تم ربط الفيديو' : 'في انتظار الفيديو'}</small></div></div><label>العنوان<input name="title" defaultValue={lesson.title} required /></label><label>الوصف<textarea name="description" defaultValue={lesson.description} rows={2}/></label><div className="form-grid"><label>المدة بالدقائق<input name="duration" type="number" min="1" defaultValue={lesson.duration_minutes}/></label><label className="publish-check"><input name="published" type="checkbox" defaultChecked={lesson.is_published}/> منشورة للطلاب</label></div><label>لينك YouTube Unlisted<input name="youtubeUrl" defaultValue={lesson.lesson_media?.[0]?.youtube_video_id || ''} placeholder="https://youtu.be/xxxxxxxxxxx"/></label><div className="lesson-actions"><button className="primary-button" type="submit">{saved === lesson.id ? <><CheckCircle2/> تم الحفظ</> : <><Save/> حفظ المحاضرة</>}</button><button className="danger-button" type="button" onClick={() => void deleteLesson(lesson)}><Trash2/> حذف</button></div></form>)}</div></section>}
+        {active === 'course' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>إدارة المحاضرات</h2><p>أضف أو احذف محاضرات، والصق لينك YouTube الـUnlisted ثم احفظ.</p></div><div><button className="primary-button" type="button" onClick={() => void addLesson()} disabled={addingLesson}><Plus/> {addingLesson ? 'جاري الإضافة...' : 'إضافة محاضرة'}</button> <span className="status-badge">Supabase Live</span></div></div><div className="admin-lessons">{lessons.map((lesson) => <form key={lesson.id} className="admin-lesson-form" onSubmit={(event) => void saveLesson(event, lesson.id)}><div className="admin-lesson-title"><span>{lesson.position}</span><div><strong>المحاضرة {lesson.position}</strong><small>{lesson.lesson_media?.[0]?.youtube_video_id ? 'تم ربط الفيديو' : 'في انتظار الفيديو'}</small></div></div><label>العنوان<input name="title" defaultValue={lesson.title} required /></label><label>الوصف<textarea name="description" defaultValue={lesson.description} rows={2}/></label><div className="form-grid"><label>المدة بالدقائق<input name="duration" type="number" min="1" defaultValue={lesson.duration_minutes}/></label><label className="publish-check"><input name="published" type="checkbox" defaultChecked={lesson.is_published}/> منشورة للطلاب</label></div><label>لينك YouTube Unlisted<input name="youtubeUrl" defaultValue={lesson.lesson_media?.[0]?.youtube_video_id || ''} placeholder="https://youtu.be/xxxxxxxxxxx"/></label><div className="lesson-actions"><button className="primary-button" type="submit">{saved === lesson.id ? <><CheckCircle2/> تم الحفظ</> : <><Save/> حفظ المحاضرة</>}</button><button className="secondary-button" type="button" onClick={() => void loadQuiz(lesson)}>تعديل الاختبار</button><button className="danger-button" type="button" onClick={() => void deleteLesson(lesson)}><Trash2/> حذف</button></div></form>)}</div></section>}
+        {quizLesson && <section className="admin-panel quiz-manager"><div className="admin-panel-heading"><div><h2>اختبار: {quizLesson.title}</h2><p>أضف أسئلة، عدّل الاختيارات، وحدد الإجابة الصحيحة.</p></div><div><button className="primary-button" type="button" onClick={() => void addQuizQuestion()}><Plus/> إضافة سؤال</button><button className="secondary-button" type="button" onClick={() => setQuizLesson(null)}>إغلاق</button></div></div>{quizLoading ? <div className="chat-state">جاري تحميل الأسئلة...</div> : quizQuestions.length === 0 ? <div className="chat-state"><strong>لا توجد أسئلة بعد</strong><span>اضغط إضافة سؤال لبدء الاختبار.</span></div> : <div className="quiz-admin-list">{quizQuestions.map((question, number) => <form key={question.id} className="admin-lesson-form quiz-admin-form" onSubmit={(event) => void saveQuizQuestion(event, question)}><div className="admin-lesson-title"><span>{number + 1}</span><strong>السؤال {number + 1}</strong></div><label>نص السؤال<input name="prompt" defaultValue={question.prompt} required /></label><label>تفسير الإجابة بعد التصحيح<textarea name="explanation" defaultValue={question.explanation} rows={2}/></label><div className="quiz-option-fields">{(question.quiz_options || []).sort((x, y) => x.position - y.position).map((option, index) => <label key={option.id}>اختيار {index + 1}<input name={`option-${option.id}`} defaultValue={option.label} required /></label>)}</div><div className="form-grid"><label>الإجابة الصحيحة<select name="answer" defaultValue={question.quiz_answer_keys?.[0]?.correct_option_id || question.quiz_options?.[0]?.id}>{(question.quiz_options || []).sort((x, y) => x.position - y.position).map((option, index) => <option key={option.id} value={option.id}>اختيار {index + 1}</option>)}</select></label><label className="publish-check"><input name="published" type="checkbox" defaultChecked={question.is_published}/> ظاهر للطلاب</label></div><div className="lesson-actions"><button className="primary-button" type="submit"><Save/> حفظ السؤال</button><button className="danger-button" type="button" onClick={() => void deleteQuizQuestion(question)}><Trash2/> حذف السؤال</button></div></form>)}</div>}</section>}
         {active === 'messages' && <section className="admin-panel chat-admin"><aside className="thread-list"><h2>المحادثات</h2>{threads.length === 0 ? <p className="muted">مفيش أسئلة لسه.</p> : threads.map((thread) => <button key={thread.id} className={selectedThread === thread.id ? 'active' : ''} onClick={() => setSelectedThread(thread.id)}><span className="thread-avatar">{thread.profiles?.full_name?.charAt(0) || 'ط'}</span><span><strong>{thread.profiles?.full_name || 'طالب'}</strong><small>{new Date(thread.last_message_at).toLocaleString('ar-EG')}</small></span></button>)}</aside><div className="admin-conversation">{!selectedThread ? <div className="chat-state"><MessageCircle/><strong>اختار محادثة</strong><span>رسائل الطالب هتظهر هنا.</span></div> : <><div className="admin-message-list">{messages.map((message) => <div key={message.id} className={`chat-bubble ${message.sender_id === adminId ? 'mine' : 'admin'}`}><p>{message.body}</p><time>{new Date(message.created_at).toLocaleString('ar-EG')}</time></div>)}</div><form onSubmit={(event) => void sendReply(event)}><input name="message" value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} required maxLength={2000} placeholder="اكتب ردك للطالب..."/><button className="primary-button" disabled={sendingReply || !replyDraft.trim()}><Send size={18}/> {sendingReply ? 'جاري الإرسال...' : 'إرسال'}</button></form></>}</div></section>}
         {active === 'students' && <section className="admin-panel"><div className="admin-panel-heading"><div><h2>الطلاب المسجلون</h2><p>بيانات حقيقية من الحسابات المسجلة في المنصة.</p></div><strong>{students.length} طالب</strong></div>{students.length === 0 ? <div className="chat-state"><Users/><strong>لسه مفيش طلاب مسجلين</strong><span>أول ما طالب يعمل حساب، بياناته هتظهر هنا تلقائيًا.</span></div> : <div className="student-table-wrap"><table className="student-table"><thead><tr><th>الطالب</th><th>الهاتف</th><th>الصفة / الهدف</th><th>حالة الاشتراك</th><th>تاريخ التسجيل</th></tr></thead><tbody>{students.map((student) => { const enrollment = student.enrollments?.[0]; return <tr key={student.id}><td><strong>{student.full_name || 'بدون اسم'}</strong></td><td dir="ltr">{student.phone || '—'}</td><td>{[student.audience_role, student.goal].filter(Boolean).join(' — ') || '—'}</td><td><span className="status-badge">{enrollment?.status === 'completed' ? 'مكتمل' : enrollment?.status === 'suspended' ? 'موقوف' : enrollment ? 'نشط' : 'لم يبدأ'}</span></td><td>{new Date(student.created_at).toLocaleDateString('ar-EG')}</td></tr> })}</tbody></table></div>}</section>}
         {active !== 'dashboard' && active !== 'course' && active !== 'messages' && active !== 'students' && <section className="admin-panel placeholder-panel"><Settings size={42}/><h2>القسم جاهز للمرحلة التالية</h2><p>هنفعّل بياناته الحقيقية بعد تثبيت الإدارة والشات وتجربتهم.</p></section>}

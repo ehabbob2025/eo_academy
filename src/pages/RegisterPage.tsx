@@ -39,12 +39,11 @@ export function RegisterPage({ state }: { state: CourseState }) {
         setError('تعذر إنشاء الحساب الآن. تأكد إن Anonymous sign-ins مفعّل في Supabase ثم جرّب تاني.')
         return
       }
-      const { error: profileError } = await supabase.from('profiles').upsert({
-        id: data.user.id,
-        full_name: profile.fullName,
-        phone: profile.phone,
-        contact_email: profile.email,
-      }, { onConflict: 'id' })
+      const { error: profileError } = await supabase.rpc('save_student_profile', {
+        p_full_name: profile.fullName,
+        p_phone: profile.phone,
+        p_contact_email: profile.email,
+      })
       if (profileError) {
         await supabase.auth.signOut({ scope: 'local' })
         setError('التسجيل محتاج إعدادًا أخيرًا في قاعدة البيانات. تواصل مع مسؤول المنصة.')

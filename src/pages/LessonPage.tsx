@@ -12,6 +12,8 @@ export function LessonPage({ state }: { state: CourseState }) {
   const { lessonId } = useParams()
   const lesson = state.lessons.find((item) => item.id === lessonId)
   const [watchedSeconds, setWatchedSeconds] = useState(0)
+  const [displayWatchedSeconds, setDisplayWatchedSeconds] = useState(0)
+  const [trackingActive, setTrackingActive] = useState(false)
   const [requiredSeconds, setRequiredSeconds] = useState(0)
   const [durationSeconds, setDurationSeconds] = useState(Math.max(lesson?.durationMinutes || 1, 1) * 60)
   const [videoId, setVideoId] = useState(lesson?.youtubeVideoId || '')
@@ -23,7 +25,10 @@ export function LessonPage({ state }: { state: CourseState }) {
   const nextLesson = useMemo(() => state.lessons.find((item) => item.position === (lesson?.position || 0) + 1), [state.lessons, lesson])
 
   useEffect(() => {
-    setWatchedSeconds(lesson?.quizPassed ? Math.max(lesson.durationMinutes, 1) * 60 : 0)
+    const initialWatchedSeconds = lesson?.quizPassed ? Math.max(lesson.durationMinutes, 1) * 60 : 0
+    setWatchedSeconds(initialWatchedSeconds)
+    setDisplayWatchedSeconds(initialWatchedSeconds)
+    setTrackingActive(false)
     setRequiredSeconds(Math.ceil(Math.max(lesson?.durationMinutes || 1, 1) * 60 * .85))
     setDurationSeconds(Math.max(lesson?.durationMinutes || 1, 1) * 60)
     setVideoId(lesson?.youtubeVideoId || '')
@@ -38,27 +43,44 @@ export function LessonPage({ state }: { state: CourseState }) {
     const client = supabase
     const loadProgress = async () => {
       const { data } = await client.from('lesson_progress').select('watched_seconds').eq('lesson_id', lesson.id).maybeSingle()
-      if (data?.watched_seconds) setWatchedSeconds(data.watched_seconds)
+      if (typeof data?.watched_seconds === 'number') {
+        setWatchedSeconds(data.watched_seconds)
+        setDisplayWatchedSeconds(data.watched_seconds)
+      }
     }
     void loadProgress()
   }, [lesson?.id])
 
   useEffect(() => {
-    if (!supabase || !lesson || watched) return
+    if (!supabase || !lesson || !videoId || watched) return
     const client = supabase
     const recordWatch = async () => {
       if (document.visibilityState !== 'visible') return
       const { data, error: watchError } = await client.rpc('record_lesson_watch', { p_lesson_id: lesson.id, p_increment_seconds: 10 })
-      if (watchError || !data) return
+      if (watchError || !data) {
+        setTrackingActive(false)
+        return
+      }
       const progress = data as { watchedSeconds: number; durationSeconds: number; requiredSeconds: number }
       setWatchedSeconds(progress.watchedSeconds)
+      setDisplayWatchedSeconds((current) => Math.max(current, progress.watchedSeconds))
       setDurationSeconds(progress.durationSeconds)
       setRequiredSeconds(progress.requiredSeconds)
+      setTrackingActive(true)
     }
     void recordWatch()
     const timer = window.setInterval(() => { void recordWatch() }, 10000)
     return () => window.clearInterval(timer)
-  }, [lesson?.id, watched])
+  }, [lesson?.id, videoId, watched])
+
+  useEffect(() => {
+    if (!lesson || !videoId || !trackingActive || watched) return
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      setDisplayWatchedSeconds((current) => Math.min(current + 1, durationSeconds))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [lesson?.id, videoId, trackingActive, watched, durationSeconds])
 
   useEffect(() => {
     if (!supabase || !lesson) return
@@ -106,7 +128,7 @@ export function LessonPage({ state }: { state: CourseState }) {
 
       {videoId ? <div className="video-frame"><iframe src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`} title={lesson.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div> : <div className="video-empty"><PlayCircle size={64} /><h2>الفيديو لم يُضف بعد</h2><p>الأدمن يضيف لينك YouTube من لوحة الإدارة.</p></div>}
 
-      <section className="lesson-watch-progress" aria-live="polite"><div><strong>{watched ? 'أكملت الحد المطلوب للمشاهدة' : `تقدم المشاهدة ${Math.min(100, Math.floor((watchedSeconds / Math.max(durationSeconds, 1)) * 100))}%`}</strong><span>{watched ? 'الاختبار مفتوح الآن.' : 'يلزم إكمال 85% لفتح الاختبار والمحاضرة التالية.'}</span></div><div className="watch-track"><i style={{ width: `${Math.min(100, (watchedSeconds / Math.max(durationSeconds, 1)) * 100)}%` }} /></div></section>
+      <section className="lesson-watch-progress" aria-live="polite"><div><strong>{watched ? 'أكملت الحد المطلوب للمشاهدة' : `تقدم المشاهدة ${Math.min(100, Math.floor((displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100))}%`}</strong><span>{watched ? 'الاختبار مفتوح الآن.' : 'يلزم إكمال 85% لفتح الاختبار والمحاضرة التالية.'}</span></div><div className="watch-track"><i style={{ width: `${Math.min(100, (displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100)}%` }} /></div></section>
 
       <section className={`quiz-section ${watched ? '' : 'disabled-section'}`}>
         <div className="section-heading"><div><span className="eyebrow">اختبار المحاضرة</span><h2>اتأكد إن المعلومة وصلت</h2><p>الاختبار بيتعدل من لوحة الإدارة ونتيجته محفوظة في حسابك.</p></div><span className="score-rule">درجة النجاح 70%</span></div>

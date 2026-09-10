@@ -39,6 +39,12 @@ export function LessonPage({ state }: { state: CourseState }) {
   const watched = watchedSeconds >= requiredSeconds && requiredSeconds > 0
 
   useEffect(() => {
+    if (lesson && watched && !lesson.quizEnabled && lesson.status !== 'completed') {
+      state.completeLesson(lesson.id)
+    }
+  }, [lesson?.id, lesson?.quizEnabled, lesson?.status, watched])
+
+  useEffect(() => {
     if (!supabase || !lesson) return
     const client = supabase
     const loadProgress = async () => {
@@ -93,7 +99,7 @@ export function LessonPage({ state }: { state: CourseState }) {
   }, [lesson?.id])
 
   useEffect(() => {
-    if (!supabase || !lesson || !watched) return
+    if (!supabase || !lesson || !lesson.quizEnabled || !watched) return
     const client = supabase
     const loadQuestions = async () => {
       setQuestionsLoading(true)
@@ -103,10 +109,10 @@ export function LessonPage({ state }: { state: CourseState }) {
       setQuestionsLoading(false)
     }
     void loadQuestions()
-  }, [lesson?.id, watched])
+  }, [lesson?.id, lesson?.quizEnabled, watched])
 
   if (!lesson) return <Navigate to="/dashboard" replace />
-  if (lesson.status === 'locked') return <div className="empty-state"><LockKeyhole /><h1>المحاضرة لسه مقفولة</h1><p>انجح في اختبار المحاضرة السابقة الأول.</p><Link className="secondary-button" to="/dashboard">الرجوع للرئيسية</Link></div>
+  if (lesson.status === 'locked') return <div className="empty-state"><LockKeyhole /><h1>المحاضرة لسه مقفولة</h1><p>أكمل 85% من المحاضرة السابقة، واجتز اختبارها إن كان مفعّلًا.</p><Link className="secondary-button" to="/dashboard">الرجوع للرئيسية</Link></div>
 
   const submitQuiz = async (event: FormEvent) => {
     event.preventDefault()
@@ -128,9 +134,9 @@ export function LessonPage({ state }: { state: CourseState }) {
 
       {videoId ? <div className="video-frame"><iframe src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`} title={lesson.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div> : <div className="video-empty"><PlayCircle size={64} /><h2>الفيديو لم يُضف بعد</h2><p>الأدمن يضيف لينك YouTube من لوحة الإدارة.</p></div>}
 
-      <section className="lesson-watch-progress" aria-live="polite"><div><strong>{watched ? 'أكملت الحد المطلوب للمشاهدة' : `تقدم المشاهدة ${Math.min(100, Math.floor((displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100))}%`}</strong><span>{watched ? 'الاختبار مفتوح الآن.' : 'يلزم إكمال 85% لفتح الاختبار والمحاضرة التالية.'}</span></div><div className="watch-track"><i style={{ width: `${Math.min(100, (displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100)}%` }} /></div></section>
+      <section className="lesson-watch-progress" aria-live="polite"><div><strong>{watched ? 'أكملت الحد المطلوب للمشاهدة' : `تقدم المشاهدة ${Math.min(100, Math.floor((displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100))}%`}</strong><span>{watched ? (lesson.quizEnabled ? 'الاختبار مفتوح الآن.' : 'تم إكمال المحاضرة، والمحاضرة التالية متاحة الآن.') : (lesson.quizEnabled ? 'يلزم إكمال 85% لفتح الاختبار والمحاضرة التالية.' : 'يلزم إكمال 85% لفتح المحاضرة التالية.')}</span></div><div className="watch-track"><i style={{ width: `${Math.min(100, (displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100)}%` }} /></div></section>
 
-      <section className={`quiz-section ${watched ? '' : 'disabled-section'}`}>
+      {lesson.quizEnabled && <section className={`quiz-section ${watched ? '' : 'disabled-section'}`}>
         <div className="section-heading"><div><span className="eyebrow">اختبار المحاضرة</span><h2>اتأكد إن المعلومة وصلت</h2><p>الاختبار بيتعدل من لوحة الإدارة ونتيجته محفوظة في حسابك.</p></div><span className="score-rule">درجة النجاح 70%</span></div>
         {questionsLoading ? <div className="chat-state"><Loader2 className="spin"/> جاري تحميل الاختبار...</div> : !watched ? <p className="muted">الاختبار مقفل حتى تصل إلى 85% من مدة المحاضرة.</p> : questions.length === 0 ? <p className="muted">الاختبار لم يُضف بعد لهذه المحاضرة.</p> : <form onSubmit={(event) => void submitQuiz(event)}>
           <fieldset disabled={Boolean(result?.passed)}>
@@ -140,8 +146,8 @@ export function LessonPage({ state }: { state: CourseState }) {
           {result && <div className={`result-message ${result.passed ? 'success' : 'error'}`}>{result.passed ? <CheckCircle2 /> : <CircleAlert />}<div><strong>{result.passed ? 'مبروك — المحاضرة التالية اتفتحت' : 'لسه محتاج مراجعة بسيطة'}</strong><span>درجتك {Math.round(result.score)}% — {result.correctCount} من {result.totalCount} صحيحة.</span></div></div>}
           {!result?.passed && <button className="primary-button" type="submit">إرسال الإجابات <ArrowLeft size={19} /></button>}
         </form>}
-      </section>
-      <div className="lesson-navigation"><Link to="/dashboard"><ArrowRight size={18} /> كل المحاضرات</Link>{result?.passed && nextLesson && <Link to={`/lesson/${nextLesson.id}`}>المحاضرة التالية <ArrowLeft size={18} /></Link>}</div>
+      </section>}
+      <div className="lesson-navigation"><Link to="/dashboard"><ArrowRight size={18} /> كل المحاضرات</Link>{((lesson.quizEnabled && result?.passed) || (!lesson.quizEnabled && watched)) && nextLesson && <Link to={`/lesson/${nextLesson.id}`}>المحاضرة التالية <ArrowLeft size={18} /></Link>}</div>
     </div>
   )
 }

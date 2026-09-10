@@ -8,6 +8,7 @@ export interface CourseLesson {
   durationMinutes: number
   status: LessonStatus
   youtubeVideoId?: string
+  quizEnabled: boolean
   quizPassed: boolean
 }
 

@@ -14,6 +14,7 @@ export const demoLessons: CourseLesson[] = [
     description: 'أضف عنوان المحاضرة ووصفها ولينك الفيديو من لوحة الأدمن.',
     durationMinutes: 25,
     status: 'available',
+    quizEnabled: false,
     quizPassed: false,
   },
   {
@@ -23,6 +24,7 @@ export const demoLessons: CourseLesson[] = [
     description: 'تُفتح تلقائيًا بعد النجاح في اختبار المحاضرة السابقة.',
     durationMinutes: 25,
     status: 'locked',
+    quizEnabled: true,
     quizPassed: false,
   },
   {
@@ -32,6 +34,7 @@ export const demoLessons: CourseLesson[] = [
     description: 'تُفتح تلقائيًا بعد النجاح في اختبار المحاضرة السابقة.',
     durationMinutes: 25,
     status: 'locked',
+    quizEnabled: true,
     quizPassed: false,
   },
   {
@@ -41,6 +44,7 @@ export const demoLessons: CourseLesson[] = [
     description: 'تُفتح تلقائيًا بعد النجاح في اختبار المحاضرة السابقة.',
     durationMinutes: 25,
     status: 'locked',
+    quizEnabled: true,
     quizPassed: false,
   },
   {
@@ -50,6 +54,7 @@ export const demoLessons: CourseLesson[] = [
     description: 'بعدها يتفتح مشروع التخرج والعرض الخاص بالكورس المدفوع.',
     durationMinutes: 25,
     status: 'locked',
+    quizEnabled: true,
     quizPassed: false,
   },
 ]

@@ -11,7 +11,11 @@ const PROJECT_KEY = 'eo-course-project-status'
 export function useCourseState() {
   const [lessons, setLessons] = useState<CourseLesson[]>(() => {
     const saved = localStorage.getItem(LESSONS_KEY)
-    return saved ? JSON.parse(saved) : demoLessons
+    if (!saved) return demoLessons
+    return (JSON.parse(saved) as CourseLesson[]).map((lesson) => ({
+      ...lesson,
+      quizEnabled: lesson.quizEnabled ?? (lesson.position !== 1),
+    }))
   })
   const [profile, setProfile] = useState<StudentProfile | null>(() => {
     const saved = localStorage.getItem(PROFILE_KEY)

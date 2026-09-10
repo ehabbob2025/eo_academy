@@ -41,30 +41,46 @@ export function useCourseState() {
       await new Promise((resolve) => window.setTimeout(resolve, 500))
       const { data } = await client
         .from('lessons')
-        .select('id,position,title,description,duration_minutes,lesson_media(youtube_video_id)')
+        .select('id,position,title,description,duration_minutes,quiz_enabled,lesson_media(youtube_video_id),lesson_progress(watched_seconds,quiz_passed)')
         .eq('course_id', '11111111-1111-4111-8111-111111111111')
         .eq('is_published', true)
         .order('position')
       if (!data?.length) return
-      setLessons((current) => data.map((lesson) => {
-        const previous = current.find((item) => item.position === lesson.position)
+      const prepared = data.map((lesson) => {
         const media = lesson.lesson_media as unknown as { youtube_video_id: string }[] | null
+        const progressRows = lesson.lesson_progress as unknown as { watched_seconds: number; quiz_passed: boolean }[] | null
+        const lessonProgress = progressRows?.[0]
+        const quizEnabled = lesson.quiz_enabled !== false
+        const watchedEnough = (lessonProgress?.watched_seconds || 0) >= Math.ceil(Math.max(lesson.duration_minutes, 1) * 60 * .85)
+        const completed = quizEnabled ? Boolean(lessonProgress?.quiz_passed) : watchedEnough
         return {
-          id: lesson.id,
-          position: lesson.position,
-          title: lesson.title,
-          description: lesson.description,
-          durationMinutes: lesson.duration_minutes,
-          youtubeVideoId: media?.[0]?.youtube_video_id || '',
-          quizPassed: previous?.quizPassed || false,
-          status: previous?.quizPassed ? 'completed' : lesson.position === 1 || current.some((item) => item.position === lesson.position - 1 && item.quizPassed) ? 'available' : 'locked',
-        } as CourseLesson
-      }))
+          lesson: {
+            id: lesson.id,
+            position: lesson.position,
+            title: lesson.title,
+            description: lesson.description,
+            durationMinutes: lesson.duration_minutes,
+            youtubeVideoId: media?.[0]?.youtube_video_id || '',
+            quizEnabled,
+            quizPassed: Boolean(lessonProgress?.quiz_passed),
+            status: completed ? 'completed' : 'locked',
+          } as CourseLesson,
+          completed,
+        }
+      })
+      setLessons(prepared.map((entry, index) => ({
+        ...entry.lesson,
+        status: entry.completed
+          ? 'completed'
+          : index === 0 || prepared.slice(0, index).every((previous) => previous.completed)
+            ? 'available'
+            : 'locked',
+      })))
     }
     void loadLiveLessons()
   }, [profile])
 
-  const completedCount = lessons.filter((lesson) => lesson.quizPassed).length
+  const completedCount = lessons.filter((lesson) => lesson.status === 'completed').length
   const progress = Math.round((completedCount / lessons.length) * 100)
   const courseCompleted = completedCount === lessons.length
 
@@ -75,6 +91,18 @@ export function useCourseState() {
       return current.map((lesson) => {
         if (lesson.id === lessonId) return { ...lesson, quizPassed: true, status: 'completed' }
         if (lesson.position === passed.position + 1) return { ...lesson, status: 'available' }
+        return lesson
+      })
+    })
+  }
+
+  const completeLesson = (lessonId: string) => {
+    setLessons((current) => {
+      const completed = current.find((lesson) => lesson.id === lessonId)
+      if (!completed) return current
+      return current.map((lesson) => {
+        if (lesson.id === lessonId) return { ...lesson, status: 'completed' }
+        if (lesson.position === completed.position + 1) return { ...lesson, status: 'available' }
         return lesson
       })
     })
@@ -108,6 +136,7 @@ export function useCourseState() {
       progress,
       courseCompleted,
       passLesson,
+      completeLesson,
       updateLesson,
       projectStatus,
       submitProject: () => setProjectStatus('submitted'),

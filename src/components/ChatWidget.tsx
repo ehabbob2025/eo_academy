@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from './lib/supabase';
 
-export default function ChatWidget({ userId }) {
+export default function ChatWidget({ userId }: { userId?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { sender: 'bot', text: 'أهلاً بك! أنا مساعدك الذكي في الأكاديمية، كيف يمكنني مساعدتك؟' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const endRef = useRef(null);
+  const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -23,28 +23,28 @@ export default function ChatWidget({ userId }) {
     setLoading(true);
 
     try {
-      // البحث في قاعدة المعرفة التي قمت بإدخالها في Supabase
-      const { data: kbData } = await supabase
-        .from('ai_knowledge_base')
-        .select('question, answer');
-
-      // مطابقة مبسطة بالكلمات المفتاحية من إجاباتك المدخلة
       let botAnswer = 'شكراً لتواصلك! يمكنك التواصل مع الإدارة مباشرة لمزيد من التفاصيل.';
-      if (kbData && kbData.length > 0) {
-        const found = kbData.find(item => 
-          userText.includes(item.question) || item.question.includes(userText)
-        );
-        if (found) {
-          botAnswer = found.answer;
-        }
-      }
 
-      // حفظ المحادثة في جدول ai_chat_logs
-      if (userId) {
-        await supabase.from('ai_chat_logs').insert([
-          { user_id: userId, sender: 'user', message: userText },
-          { user_id: userId, sender: 'bot', message: botAnswer }
-        ]);
+      if (supabase) {
+        const { data: kbData } = await supabase
+          .from('ai_knowledge_base')
+          .select('question, answer');
+
+        if (kbData && kbData.length > 0) {
+          const found = kbData.find((item: { question: string; answer: string }) => 
+            userText.includes(item.question) || item.question.includes(userText)
+          );
+          if (found) {
+            botAnswer = found.answer;
+          }
+        }
+
+        if (userId) {
+          await supabase.from('ai_chat_logs').insert([
+            { user_id: userId, sender: 'user', message: userText },
+            { user_id: userId, sender: 'bot', message: botAnswer }
+          ]);
+        }
       }
 
       setMessages((prev) => [...prev, { sender: 'bot', text: botAnswer }]);

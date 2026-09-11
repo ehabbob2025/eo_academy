@@ -1,5 +1,37 @@
 -- EO Academy: per-lesson student comments and secure admin conversation deletion.
 
+-- Keep existing registered students visible to the authenticated admin.
+alter table public.profiles
+  add column if not exists is_archived boolean not null default false;
+
+alter table public.profiles enable row level security;
+alter table public.enrollments enable row level security;
+
+grant select on table public.profiles, public.enrollments to authenticated;
+
+revoke execute on function public.is_admin() from public, anon;
+grant execute on function public.is_admin() to authenticated;
+
+drop policy if exists "profiles_own_or_admin_select" on public.profiles;
+create policy "profiles_own_or_admin_select"
+  on public.profiles
+  for select
+  to authenticated
+  using (
+    id = (select auth.uid())
+    or (select public.is_admin())
+  );
+
+drop policy if exists "enrollments_own_select" on public.enrollments;
+create policy "enrollments_own_select"
+  on public.enrollments
+  for select
+  to authenticated
+  using (
+    user_id = (select auth.uid())
+    or (select public.is_admin())
+  );
+
 create table if not exists public.lesson_comments (
   id uuid primary key default gen_random_uuid(),
   lesson_id uuid not null references public.lessons(id) on delete cascade,

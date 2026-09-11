@@ -67,7 +67,7 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
   const loadDashboard = async () => {
     if (!supabase) return
     setLoading(true)
-    const [{ data: auth }, { data: dbLessons }, { data: dbMedia }, { data: dbThreads }, { data: dbProfiles }, { data: dbEnrollments }] = await Promise.all([
+    const [authResult, lessonsResult, mediaResult, threadsResult, profilesResult, enrollmentsResult] = await Promise.all([
       supabase.auth.getUser(),
       supabase.from('lessons').select('id,position,title,description,duration_minutes,is_published,quiz_enabled').order('position'),
       supabase.from('lesson_media').select('lesson_id,youtube_video_id'),
@@ -75,6 +75,12 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
       supabase.from('profiles').select('id,full_name,phone,audience_role,goal,created_at,role,is_archived').order('created_at', { ascending: false }),
       supabase.from('enrollments').select('user_id,status,enrolled_at,completed_at'),
     ])
+    const { data: auth } = authResult
+    const { data: dbLessons } = lessonsResult
+    const { data: dbMedia } = mediaResult
+    const { data: dbThreads } = threadsResult
+    const { data: dbProfiles, error: profilesError } = profilesResult
+    const { data: dbEnrollments, error: enrollmentsError } = enrollmentsResult
     setAdminId(auth.user?.id || '')
     void refreshUnreadCount(auth.user?.id || '')
     const mediaByLesson = new Map((dbMedia || []).map((media) => [media.lesson_id, media.youtube_video_id]))
@@ -84,6 +90,8 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
     const liveStudents = (dbProfiles || []).filter((profile) => profile.role !== 'admin' && !profile.is_archived).map((profile) => ({ ...profile, enrollments: enrollmentByUser.has(profile.id) ? [enrollmentByUser.get(profile.id)!] : [] })) as DbStudent[]
     setStudentCount(liveStudents.length)
     setStudents(liveStudents)
+    if (profilesError) setNotice('تعذر تحميل الطلاب من قاعدة البيانات. شغّل تحديث صلاحيات الطلاب في Supabase ثم اضغط تحديث.')
+    else if (enrollmentsError) setNotice('تم تحميل الطلاب، لكن تعذر تحميل حالات اشتراكهم من Supabase.')
     setLoading(false)
   }
 

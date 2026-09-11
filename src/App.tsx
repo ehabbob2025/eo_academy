@@ -98,16 +98,16 @@ function App() {
       </Routes>}
       {!isSupabaseConfigured && <div className="demo-ribbon">وضع المعاينة — اربط Supabase لتفعيل الحسابات الحقيقية</div>}
 
-      {/* نافذة المتابعة الإلزامية تظهر إذا لم يكمل الطالب المتابعة بعد */}
+     {/* نافذة المتابعة الإلزامية */}
       {state.profile && !(state.profile as any)?.is_onboarded && (
         <OnboardingModal
-          userId={state.profile.id}
+          userId={(state.profile as any)?.id}
           onComplete={() => window.location.reload()}
         />
       )}
 
-      {/* زر المساعد الذكي يظهر للطالب المسجل */}
-      {state.profile && <ChatWidget userId={state.profile.id} />}
+      {/* زر المساعد الذكي */}
+      {state.profile && <ChatWidget userId={(state.profile as any)?.id} />}
     </BrowserRouter>
   )
 }

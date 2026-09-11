@@ -13,6 +13,8 @@ import { LessonPage } from './pages/LessonPage'
 import { ProjectPage } from './pages/ProjectPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { SocialGatePage } from './pages/SocialGatePage'
+import OnboardingModal from './OnboardingModal'
+import ChatWidget from './ChatWidget'
 import './App.css'
 
 export type CourseState = ReturnType<typeof useCourseState>
@@ -95,6 +97,17 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>}
       {!isSupabaseConfigured && <div className="demo-ribbon">وضع المعاينة — اربط Supabase لتفعيل الحسابات الحقيقية</div>}
+
+      {/* نافذة المتابعة الإلزامية تظهر إذا لم يكمل الطالب المتابعة بعد */}
+      {state.profile && !(state.profile as any)?.is_onboarded && (
+        <OnboardingModal
+          userId={state.profile.id}
+          onComplete={() => window.location.reload()}
+        />
+      )}
+
+      {/* زر المساعد الذكي يظهر للطالب المسجل */}
+      {state.profile && <ChatWidget userId={state.profile.id} />}
     </BrowserRouter>
   )
 }

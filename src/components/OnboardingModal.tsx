@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../supabaseClient'; // تأكد من مطابقة مسار ملف supabase لديك
+import { supabase } from './lib/supabase';
 
 const PLATFORMS = [
   { id: 'youtube', name: 'قناة اليوتيوب', url: 'https://youtube.com/@yourchannel', icon: '📺' },
@@ -8,11 +8,11 @@ const PLATFORMS = [
   { id: 'tiktok', name: 'حساب تيك توك', url: 'https://tiktok.com/@yourhandle', icon: '🎵' },
 ];
 
-export default function OnboardingModal({ userId, onComplete }) {
-  const [visited, setVisited] = useState({});
+export default function OnboardingModal({ userId, onComplete }: { userId?: string; onComplete: () => void }) {
+  const [visited, setVisited] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
 
-  const handleVisit = (id, url) => {
+  const handleVisit = (id: string, url: string) => {
     window.open(url, '_blank');
     setVisited((prev) => ({ ...prev, [id]: true }));
   };
@@ -23,12 +23,14 @@ export default function OnboardingModal({ userId, onComplete }) {
     if (!allVisited) return;
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_onboarded: true })
-        .eq('id', userId);
+      if (supabase && userId) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ is_onboarded: true })
+          .eq('id', userId);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
       onComplete();
     } catch (err) {
       alert('حدث خطأ أثناء حفظ البيانات، يرجى المحاولة مرة أخرى.');

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, Loader2, LockKeyhole, PlayCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, Loader2, LockKeyhole, MessageCircle, PlayCircle, Send, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 
 type QuizQuestion = { id: string; prompt: string; explanation: string; quiz_options: { id: string; label: string; position: number }[] | null }
 type QuizResult = { score: number; passed: boolean; correctCount: number; totalCount: number }
+type LessonComment = { id: string; lesson_id: string; user_id: string; author_name: string; body: string; created_at: string }
 
 export function LessonPage({ state }: { state: CourseState }) {
   const { lessonId } = useParams()
@@ -22,6 +23,13 @@ export function LessonPage({ state }: { state: CourseState }) {
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [result, setResult] = useState<QuizResult | null>(null)
   const [error, setError] = useState('')
+  const [comments, setComments] = useState<LessonComment[]>([])
+  const [commentUserId, setCommentUserId] = useState('')
+  const [commentDraft, setCommentDraft] = useState('')
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentSending, setCommentSending] = useState(false)
+  const [commentDeleting, setCommentDeleting] = useState('')
+  const [commentError, setCommentError] = useState('')
   const nextLesson = useMemo(() => state.lessons.find((item) => item.position === (lesson?.position || 0) + 1), [state.lessons, lesson])
 
   useEffect(() => {
@@ -111,6 +119,31 @@ export function LessonPage({ state }: { state: CourseState }) {
     void loadQuestions()
   }, [lesson?.id, lesson?.quizEnabled, watched])
 
+  useEffect(() => {
+    if (!supabase || !lesson) return
+    const client = supabase
+    let cancelled = false
+    const loadComments = async () => {
+      setCommentsLoading(true)
+      setCommentError('')
+      const [{ data: auth }, { data, error: loadError }] = await Promise.all([
+        client.auth.getUser(),
+        client.from('lesson_comments').select('id,lesson_id,user_id,author_name,body,created_at').eq('lesson_id', lesson.id).order('created_at', { ascending: false }),
+      ])
+      if (cancelled) return
+      setCommentUserId(auth.user?.id || '')
+      if (loadError) {
+        setComments([])
+        setCommentError('تعذر تحميل التعليقات. تأكد من تشغيل كود تحديث التعليقات في Supabase.')
+      } else {
+        setComments((data || []) as LessonComment[])
+      }
+      setCommentsLoading(false)
+    }
+    void loadComments()
+    return () => { cancelled = true }
+  }, [lesson?.id])
+
   if (!lesson) return <Navigate to="/dashboard" replace />
   if (lesson.status === 'locked') return <div className="empty-state"><LockKeyhole /><h1>المحاضرة لسه مقفولة</h1><p>أكمل 85% من المحاضرة السابقة، واجتز اختبارها إن كان مفعّلًا.</p><Link className="secondary-button" to="/dashboard">الرجوع للرئيسية</Link></div>
 
@@ -125,6 +158,40 @@ export function LessonPage({ state }: { state: CourseState }) {
     const quizResult = data as QuizResult
     setResult(quizResult)
     if (quizResult.passed) state.passLesson(lesson.id)
+  }
+
+  const submitComment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!supabase || !lesson || !commentUserId || commentSending) return
+    const body = commentDraft.trim()
+    if (!body) { setCommentError('اكتب تعليقك الأول.'); return }
+    setCommentSending(true)
+    setCommentError('')
+    const { data: liveProfile } = await supabase.from('profiles').select('full_name').eq('id', commentUserId).single()
+    const authorName = liveProfile?.full_name?.trim() || state.profile?.fullName?.trim() || ''
+    if (!authorName) {
+      setCommentSending(false)
+      setCommentError('اسم الطالب غير موجود. سجّل الدخول من جديد ثم جرّب.')
+      return
+    }
+    const { data, error: sendError } = await supabase.from('lesson_comments').insert({ lesson_id: lesson.id, user_id: commentUserId, author_name: authorName, body }).select('id,lesson_id,user_id,author_name,body,created_at').single()
+    setCommentSending(false)
+    if (sendError || !data) {
+      setCommentError('تعذر إرسال التعليق. جرّب تاني أو تأكد من تشغيل تحديث Supabase.')
+      return
+    }
+    setComments((current) => [data as LessonComment, ...current])
+    setCommentDraft('')
+  }
+
+  const deleteComment = async (comment: LessonComment) => {
+    if (!supabase || commentDeleting || !window.confirm('حذف تعليقك نهائيًا؟')) return
+    setCommentDeleting(comment.id)
+    setCommentError('')
+    const { error: deleteError } = await supabase.from('lesson_comments').delete().eq('id', comment.id)
+    setCommentDeleting('')
+    if (deleteError) { setCommentError('تعذر حذف التعليق. جرّب تاني.'); return }
+    setComments((current) => current.filter((item) => item.id !== comment.id))
   }
 
   return (
@@ -147,6 +214,17 @@ export function LessonPage({ state }: { state: CourseState }) {
           {!result?.passed && <button className="primary-button" type="submit">إرسال الإجابات <ArrowLeft size={19} /></button>}
         </form>}
       </section>}
+
+      <section className="lesson-comments" aria-labelledby="lesson-comments-title">
+        <div className="comments-heading"><div><span className="eyebrow">مجتمع المحاضرة</span><h2 id="lesson-comments-title">آراء وتعليقات الطلاب</h2><p>شارك رأيك أو سؤالك عن المحاضرة باحترام.</p></div><MessageCircle aria-hidden="true" /></div>
+        <form className="comment-form" onSubmit={(event) => void submitComment(event)}>
+          <label htmlFor="lesson-comment">اكتب تعليقك</label>
+          <textarea id="lesson-comment" value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} rows={3} maxLength={1000} placeholder="إيه أكتر معلومة استفدت منها؟" />
+          <div><small>{commentDraft.length} / 1000</small><button className="primary-button" type="submit" disabled={commentSending || !commentDraft.trim()}><Send size={18}/>{commentSending ? 'جاري الإرسال...' : 'نشر التعليق'}</button></div>
+        </form>
+        {commentError && <p className="form-error" role="alert">{commentError}</p>}
+        {commentsLoading ? <div className="comments-state"><Loader2 className="spin"/> جاري تحميل التعليقات...</div> : comments.length === 0 ? <div className="comments-state"><MessageCircle/><strong>كن أول واحد يكتب رأيه</strong><span>تعليقك هيساعد باقي الطلاب وكابتن إيهاب يطوّر المحتوى.</span></div> : <div className="comments-list">{comments.map((comment) => <article className="comment-card" key={comment.id}><div className="comment-avatar">{comment.author_name.charAt(0) || 'ط'}</div><div className="comment-content"><header><div><strong>{comment.author_name}</strong><time>{new Date(comment.created_at).toLocaleString('ar-EG')}</time></div>{comment.user_id === commentUserId && <button type="button" onClick={() => void deleteComment(comment)} disabled={commentDeleting === comment.id} aria-label="حذف التعليق" title="حذف التعليق"><Trash2 size={16}/></button>}</header><p>{comment.body}</p></div></article>)}</div>}
+      </section>
       <div className="lesson-navigation"><Link to="/dashboard"><ArrowRight size={18} /> كل المحاضرات</Link>{((lesson.quizEnabled && result?.passed) || (!lesson.quizEnabled && watched)) && nextLesson && <Link to={`/lesson/${nextLesson.id}`}>المحاضرة التالية <ArrowLeft size={18} /></Link>}</div>
     </div>
   )

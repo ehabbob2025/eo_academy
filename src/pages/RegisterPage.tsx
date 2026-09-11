@@ -75,7 +75,11 @@ export function RegisterPage({ state }: { state: CourseState }) {
         <h1>سجّل بياناتك</h1>
         <p className="muted">اكتب بياناتك واضغط بدء الكورس — هتدخل فورًا من غير انتظار إيميل.</p>
         <form className="form-stack" onSubmit={submit}>
-          <label>الاسم الثلاثي<input name="fullName" required minLength={5} placeholder="مثال: أحمد محمد حسن" /></label>
+          <label>
+            الاسم الثلاثي
+            <input name="fullName" required minLength={5} placeholder="مثال: أحمد محمد حسن" aria-describedby="certificate-name-hint" />
+            <small id="certificate-name-hint" className="field-hint">اكتب اسمك ثلاثي كما تريد أن يظهر في الشهادة.</small>
+          </label>
           <label>الإيميل<div className="input-with-icon"><Mail size={18} /><input name="email" type="email" required placeholder="name@example.com" /></div></label>
           <label>رقم واتساب<input name="phone" required inputMode="tel" placeholder="01xxxxxxxxx" /></label>
           {error && <p className="form-error" role="alert">{error}</p>}

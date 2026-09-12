@@ -19,7 +19,7 @@ export default function ChatWidget({ userId }: { userId?: string }) {
 
     const userText = input.trim()
     setInput('')
-    setMessages((prev) => [...prev, { sender: 'user', text: userText }])
+    setMessages((prev) => [...prev, { sender: 'user', text: userText }]);
     setLoading(true)
 
     try {
@@ -59,7 +59,7 @@ export default function ChatWidget({ userId }: { userId?: string }) {
   }
 
   return (
-    <div style={{ position: 'fixed', bottom: '24px', left: '24px', zIndex: 99999, direction: 'rtl', fontFamily: 'inherit' }}>
+    <div style={{ position: 'fixed', bottom: '90px', left: '24px', zIndex: 99999, direction: 'rtl', fontFamily: 'inherit' }}>
       {!isOpen && (
         <button
           type="button"

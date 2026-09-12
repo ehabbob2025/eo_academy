@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase } from '../lib/supabase';
 
 export default function ChatWidget({ userId }: { userId?: string }) {
   const [isOpen, setIsOpen] = useState(false);

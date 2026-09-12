@@ -2,15 +2,23 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const PLATFORMS = [
-  { id: 'youtube', name: 'قناة اليوتيوب', url: 'https://youtube.com/@yourchannel', icon: '📺' },
-  { id: 'facebook', name: 'صفحة فيسبوك', url: 'https://facebook.com/yourpage', icon: '📘' },
-  { id: 'instagram', name: 'حساب إنستغرام', url: 'https://instagram.com/yourhandle', icon: '📸' },
-  { id: 'tiktok', name: 'حساب تيك توك', url: 'https://tiktok.com/@yourhandle', icon: '🎵' },
+  { id: 'youtube', name: 'قناة اليوتيوب', url: 'https://www.youtube.com/@EhabOsama142', icon: '📺' },
+  { id: 'facebook', name: 'صفحة فيسبوك', url: 'https://www.facebook.com/elbob.ehab.94', icon: '📘' },
+  { id: 'instagram', name: 'حساب إنستغرام', url: 'https://www.instagram.com/nutritionist_ehab_osama/', icon: '📸' },
+  { id: 'tiktok', name: 'حساب تيك توك', url: 'https://www.tiktok.com/@nutritionist_ehab.osama', icon: '🎵' },
 ]
 
-export default function OnboardingModal({ userId, onComplete }: { userId?: string; onComplete: () => void }) {
+export default function OnboardingModal({ userId, onComplete }: { userId?: string; onComplete?: () => void }) {
+  // فحص ما إذا كان الطالب قد أتم المتابعة مسبقاً في هذا المتصفح
+  const localKey = userId ? `eo_onboarded_${userId}` : 'eo_onboarded'
+  const isAlreadyDone = typeof window !== 'undefined' && localStorage.getItem(localKey) === 'true'
+
+  const [isOpen, setIsOpen] = useState(!isAlreadyDone)
   const [visited, setVisited] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(false)
+
+  // إذا كان الطالب قد أتمها، لا تعرض أي شيء نهائياً
+  if (!isOpen) return null
 
   const handleVisit = (id: string, url: string) => {
     window.open(url, '_blank')
@@ -23,6 +31,13 @@ export default function OnboardingModal({ userId, onComplete }: { userId?: strin
   const handleFinish = async () => {
     if (!allVisited) return
     setLoading(true)
+
+    // 1. إغلاق النافذة فوراً وحفظ الحالة في ذاكرة المتصفح
+    localStorage.setItem(localKey, 'true')
+    localStorage.setItem('eo_onboarded', 'true')
+    setIsOpen(false)
+
+    // 2. تحديث قاعدة البيانات في سوبابيز بالخلفية
     try {
       if (supabase && userId) {
         await supabase
@@ -30,14 +45,12 @@ export default function OnboardingModal({ userId, onComplete }: { userId?: strin
           .update({ is_onboarded: true })
           .eq('id', userId)
       }
-      if (userId) {
-        localStorage.setItem(`eo_onboarded_${userId}`, 'true')
-      }
+    } catch (e) {
+      console.error(e)
+    }
+
+    if (onComplete) {
       onComplete()
-    } catch {
-      alert('حدث خطأ أثناء حفظ البيانات، يرجى المحاولة مرة أخرى.')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -46,7 +59,7 @@ export default function OnboardingModal({ userId, onComplete }: { userId?: strin
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        backgroundColor: 'rgba(0, 0, 0, 0.92)',
         backdropFilter: 'blur(10px)',
         zIndex: 999999,
         display: 'flex',

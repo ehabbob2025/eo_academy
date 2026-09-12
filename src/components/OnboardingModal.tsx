@@ -1,90 +1,151 @@
-import { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { useState } from 'react'
+import { supabase } from '../lib/supabase'
+
 const PLATFORMS = [
   { id: 'youtube', name: 'قناة اليوتيوب', url: 'https://youtube.com/@yourchannel', icon: '📺' },
   { id: 'facebook', name: 'صفحة فيسبوك', url: 'https://facebook.com/yourpage', icon: '📘' },
   { id: 'instagram', name: 'حساب إنستغرام', url: 'https://instagram.com/yourhandle', icon: '📸' },
   { id: 'tiktok', name: 'حساب تيك توك', url: 'https://tiktok.com/@yourhandle', icon: '🎵' },
-];
+]
 
 export default function OnboardingModal({ userId, onComplete }: { userId?: string; onComplete: () => void }) {
-  const [visited, setVisited] = useState<Record<string, boolean>>({});
-  const [loading, setLoading] = useState(false);
+  const [visited, setVisited] = useState<Record<string, boolean>>({})
+  const [loading, setLoading] = useState(false)
 
   const handleVisit = (id: string, url: string) => {
-    window.open(url, '_blank');
-    setVisited((prev) => ({ ...prev, [id]: true }));
-  };
+    window.open(url, '_blank')
+    setVisited((prev) => ({ ...prev, [id]: true }))
+  }
 
-  const allVisited = PLATFORMS.every((p) => visited[p.id]);
+  const allVisited = PLATFORMS.every((p) => visited[p.id])
+  const completedCount = PLATFORMS.filter((p) => visited[p.id]).length
 
   const handleFinish = async () => {
-    if (!allVisited) return;
-    setLoading(true);
+    if (!allVisited) return
+    setLoading(true)
     try {
       if (supabase && userId) {
-        const { error } = await supabase
+        await supabase
           .from('profiles')
           .update({ is_onboarded: true })
-          .eq('id', userId);
-
-        if (error) throw error;
+          .eq('id', userId)
       }
-      onComplete();
-    } catch (err) {
-      alert('حدث خطأ أثناء حفظ البيانات، يرجى المحاولة مرة أخرى.');
+      if (userId) {
+        localStorage.setItem(`eo_onboarded_${userId}`, 'true')
+      }
+      onComplete()
+    } catch {
+      alert('حدث خطأ أثناء حفظ البيانات، يرجى المحاولة مرة أخرى.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4" dir="rtl">
-      <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-white shadow-2xl">
-        <h2 className="text-xl font-bold text-center mb-2">مرحباً بك في الأكاديمية! 🎉</h2>
-        <p className="text-zinc-400 text-xs text-center mb-5 leading-relaxed">
-          لتفعيل حسابك بالكامل، يُرجى زيارة ومتابعة منصاتنا الرسمية:
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        backdropFilter: 'blur(10px)',
+        zIndex: 999999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+        direction: 'rtl',
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '460px',
+          backgroundColor: '#0d1f18',
+          border: '1px solid #1a4535',
+          borderRadius: '24px',
+          padding: '30px',
+          color: '#ffffff',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.9)',
+          textAlign: 'center',
+          fontFamily: 'inherit',
+        }}
+      >
+        <div style={{ fontSize: '42px', marginBottom: '10px' }}>🎉</div>
+        <h2 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '8px', color: '#ffffff' }}>
+          مرحباً بك في EO Academy!
+        </h2>
+        <p style={{ color: '#a0b3aa', fontSize: '13px', lineHeight: '1.6', marginBottom: '22px' }}>
+          لفتح المحاضرات والبدء في رحلتك التعليمية، يجب متابعة منصاتنا الرسمية أولاً:
         </p>
 
-        <div className="space-y-3 mb-6">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
           {PLATFORMS.map((platform) => {
-            const isDone = visited[platform.id];
+            const isDone = visited[platform.id]
             return (
               <div
                 key={platform.id}
-                className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/70 border border-zinc-700/50"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  borderRadius: '14px',
+                  backgroundColor: isDone ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                  border: isDone ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.08)',
+                  transition: 'all 0.2s',
+                }}
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">{platform.icon}</span>
-                  <span className="font-medium text-sm">{platform.name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '20px' }}>{platform.icon}</span>
+                  <span style={{ fontWeight: '600', fontSize: '14px', color: '#ffffff' }}>{platform.name}</span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => handleVisit(platform.id, platform.url)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    isDone
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-200'
-                  }`}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    border: 'none',
+                    cursor: 'pointer',
+                    backgroundColor: isDone ? '#10b981' : '#1e3d31',
+                    color: '#ffffff',
+                    transition: 'all 0.2s',
+                  }}
                 >
-                  {isDone ? '✓ تم الفتح' : 'متابعة'}
+                  {isDone ? '✓ تم التحقق' : 'متابعة'}
                 </button>
               </div>
-            );
+            )
           })}
         </div>
 
         <button
+          type="button"
           onClick={handleFinish}
           disabled={!allVisited || loading}
-          className={`w-full py-3 rounded-xl font-bold text-sm transition ${
-            allVisited
-              ? 'bg-emerald-500 hover:bg-emerald-400 text-black cursor-pointer'
-              : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-          }`}
+          style={{
+            width: '100%',
+            padding: '14px',
+            borderRadius: '14px',
+            fontSize: '14px',
+            fontWeight: '800',
+            border: 'none',
+            cursor: allVisited && !loading ? 'pointer' : 'not-allowed',
+            backgroundColor: allVisited ? '#10b981' : '#162e24',
+            color: allVisited ? '#000000' : '#4e6d60',
+            transition: 'all 0.2s',
+            boxShadow: allVisited ? '0 8px 24px rgba(16, 185, 129, 0.35)' : 'none',
+          }}
         >
-          {loading ? 'جاري التحقق والتفعيل...' : allVisited ? 'تأكيد ودخول المنصة' : 'يرجى فتح ومتابعة كافة المنصات'}
+          {loading
+            ? 'جاري تفعيل الحساب...'
+            : allVisited
+            ? 'تأكيد ودخول المحاضرات 🚀'
+            : `يرجى متابعة كافة المنصات (${completedCount} من ${PLATFORMS.length})`}
         </button>
       </div>
     </div>
-  );
+  )
 }

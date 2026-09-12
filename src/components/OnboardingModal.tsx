@@ -9,15 +9,23 @@ const PLATFORMS = [
 ]
 
 export default function OnboardingModal({ userId, onComplete }: { userId?: string; onComplete?: () => void }) {
-  // فحص ما إذا كان الطالب قد أتم المتابعة مسبقاً في هذا المتصفح
+  // 1. استثناء صفحات الإدارة (Admin) تماماً
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+    return null
+  }
+
+  // 2. فحص ما إذا كان الطالب قد أتم المتابعة مسبقاً في هذا المتصفح
   const localKey = userId ? `eo_onboarded_${userId}` : 'eo_onboarded'
-  const isAlreadyDone = typeof window !== 'undefined' && localStorage.getItem(localKey) === 'true'
+  const isAlreadyDone = typeof window !== 'undefined' && (
+    localStorage.getItem(localKey) === 'true' || 
+    localStorage.getItem('eo_onboarded') === 'true'
+  )
 
   const [isOpen, setIsOpen] = useState(!isAlreadyDone)
   const [visited, setVisited] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(false)
 
-  // إذا كان الطالب قد أتمها، لا تعرض أي شيء نهائياً
+  // إذا كانت النافذة مغلقة أو مكتملة، لا تعرض أي شيء
   if (!isOpen) return null
 
   const handleVisit = (id: string, url: string) => {
@@ -32,12 +40,12 @@ export default function OnboardingModal({ userId, onComplete }: { userId?: strin
     if (!allVisited) return
     setLoading(true)
 
-    // 1. إغلاق النافذة فوراً وحفظ الحالة في ذاكرة المتصفح
+    // إغلاق النافذة فوراً وحفظ الحالة في ذاكرة المتصفح
     localStorage.setItem(localKey, 'true')
     localStorage.setItem('eo_onboarded', 'true')
     setIsOpen(false)
 
-    // 2. تحديث قاعدة البيانات في سوبابيز بالخلفية
+    // تحديث قاعدة البيانات في Supabase بالخلفية
     try {
       if (supabase && userId) {
         await supabase

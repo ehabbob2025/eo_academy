@@ -1,21 +1,19 @@
-import { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useParams, Link } from 'react-router-dom'
 import { course } from '../data/demo'
 import { CourseState } from '../App'
-import { supabase } from '../lib/supabase'
 
 export function LessonPage({ state }: { state: CourseState }) {
   const { lessonId } = useParams<{ lessonId: string }>()
-  const navigate = useNavigate()
 
-  // 1. تحديد المحاضرة الحالية والسابقة والتالية
+  // 1. تحديد ترتيب المحاضرات
   const currentIndex = course.lessons.findIndex((l: any) => l.id === lessonId)
   const validIndex = currentIndex !== -1 ? currentIndex : 0
   const lesson = course.lessons[validIndex] || course.lessons[0]
   const nextLesson = validIndex < course.lessons.length - 1 ? course.lessons[validIndex + 1] : null
   const prevLesson = validIndex > 0 ? course.lessons[validIndex - 1] : null
 
-  // 2. حالة التعليقات
+  // 2. إدارة التعليقات
   const [commentText, setCommentText] = useState('')
   const [comments, setComments] = useState<Array<{ name: string; date: string; text: string }>>([
     {
@@ -25,7 +23,7 @@ export function LessonPage({ state }: { state: CourseState }) {
     }
   ])
 
-  // استخراج رابط يوتيوب المضمن
+  // رابط تضمين فيديو يوتيوب
   const getEmbedUrl = (url: string) => {
     if (!url) return 'https://www.youtube.com/embed/dQw4w9WgXcQ'
     if (url.includes('embed/')) return url
@@ -67,7 +65,7 @@ export function LessonPage({ state }: { state: CourseState }) {
         overflow: 'hidden',
         boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
         position: 'relative',
-        paddingTop: '56.25%', // 16:9 Aspect Ratio
+        paddingTop: '56.25%',
         marginBottom: '24px'
       }}>
         <iframe
@@ -141,8 +139,7 @@ export function LessonPage({ state }: { state: CourseState }) {
               fontSize: '13px',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px',
-              transition: 'all 0.2s'
+              gap: '6px'
             }}
           >
             <span>→</span>
@@ -184,8 +181,7 @@ export function LessonPage({ state }: { state: CourseState }) {
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
-              boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)',
-              transition: 'all 0.2s'
+              boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
             }}
           >
             <span>المحاضرة التالية</span>
@@ -267,8 +263,7 @@ export function LessonPage({ state }: { state: CourseState }) {
                 cursor: commentText.trim() ? 'pointer' : 'not-allowed',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.2s'
+                gap: '6px'
               }}
             >
               <span>نشر التعليق</span>

@@ -6,12 +6,11 @@ import { CourseState } from '../App'
 export function LessonPage({ state }: { state: CourseState }) {
   const { lessonId } = useParams<{ lessonId: string }>()
 
-  // 1. تحديد ترتيب المحاضرات
+  // 1. حساب المحاضرة الحالية والتالية
   const currentIndex = course.lessons.findIndex((l: any) => l.id === lessonId)
   const validIndex = currentIndex !== -1 ? currentIndex : 0
   const lesson = course.lessons[validIndex] || course.lessons[0]
   const nextLesson = validIndex < course.lessons.length - 1 ? course.lessons[validIndex + 1] : null
-  const prevLesson = validIndex > 0 ? course.lessons[validIndex - 1] : null
 
   // 2. إدارة التعليقات
   const [commentText, setCommentText] = useState('')
@@ -113,105 +112,14 @@ export function LessonPage({ state }: { state: CourseState }) {
         </p>
       </div>
 
-      {/* شريط أزرار التنقل (المحاضرة التالية + كل المحاضرات + المحاضرة السابقة) */}
-      <div style={{
-        backgroundColor: '#ffffff',
-        borderRadius: '16px',
-        padding: '16px 24px',
-        border: '1px solid #e5e7eb',
-        marginBottom: '24px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
-      }}>
-        {prevLesson ? (
-          <Link
-            to={`/lesson/${prevLesson.id}`}
-            style={{
-              textDecoration: 'none',
-              color: '#0e3b2e',
-              backgroundColor: '#f3f4f6',
-              padding: '10px 18px',
-              borderRadius: '12px',
-              fontWeight: '700',
-              fontSize: '13px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <span>→</span>
-            <span>المحاضرة السابقة</span>
-          </Link>
-        ) : (
-          <div />
-        )}
-
-        <Link
-          to="/dashboard"
-          style={{
-            textDecoration: 'none',
-            color: '#0e3b2e',
-            fontWeight: '700',
-            fontSize: '14px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
-        >
-          <span>📋</span>
-          <span>كل المحاضرات</span>
-        </Link>
-
-        {nextLesson ? (
-          <Link
-            to={`/lesson/${nextLesson.id}`}
-            style={{
-              textDecoration: 'none',
-              backgroundColor: '#0e3b2e',
-              color: '#ffffff',
-              padding: '12px 24px',
-              borderRadius: '12px',
-              fontWeight: '800',
-              fontSize: '14px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
-            }}
-          >
-            <span>المحاضرة التالية</span>
-            <span>←</span>
-          </Link>
-        ) : (
-          <Link
-            to="/project"
-            style={{
-              textDecoration: 'none',
-              backgroundColor: '#d4a017',
-              color: '#000000',
-              padding: '12px 20px',
-              borderRadius: '12px',
-              fontWeight: '800',
-              fontSize: '13px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <span>مشروع التخرج 🎓</span>
-          </Link>
-        )}
-      </div>
-
       {/* قسم التعليقات */}
       <div style={{
         backgroundColor: '#ffffff',
         borderRadius: '16px',
         padding: '24px',
         border: '1px solid #e5e7eb',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+        boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+        marginBottom: '24px'
       }}>
         <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0e3b2e', marginBottom: '6px' }}>
           آراء وتعليقات الطلاب
@@ -305,6 +213,30 @@ export function LessonPage({ state }: { state: CourseState }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* زر المحاضرة التالية مباشرة مكان زر كل المحاضرات القديم */}
+      <div style={{ display: 'flex', justifyContent: 'flex-start', padding: '16px 0' }}>
+        <Link
+          to={nextLesson ? `/lesson/${nextLesson.id}` : '/dashboard'}
+          style={{
+            textDecoration: 'none',
+            backgroundColor: '#0e3b2e',
+            color: '#ffffff',
+            padding: '12px 28px',
+            borderRadius: '12px',
+            fontWeight: '800',
+            fontSize: '15px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)',
+            transition: 'all 0.2s'
+          }}
+        >
+          <span>{nextLesson ? 'المحاضرة التالية' : 'إنهاء الكورس والعودة للرئيسية'}</span>
+          <span>←</span>
+        </Link>
       </div>
 
     </div>

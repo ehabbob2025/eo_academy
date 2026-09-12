@@ -3,8 +3,17 @@ import { supabase } from '../lib/supabase'
 
 export default function ChatWidget({ userId }: { userId?: string }) {
   const [isOpen, setIsOpen] = useState(false)
+  const isLanding = typeof window !== 'undefined' && window.location.pathname === '/'
+
+  // الاستماع لزر الهيدر العلوي عند الضغط عليه في صفحة الهبوط
+  useEffect(() => {
+    const handleOpen = () => setIsOpen(true)
+    window.addEventListener('open-ai-chat', handleOpen)
+    return () => window.removeEventListener('open-ai-chat', handleOpen)
+  }, [])
+
   const [messages, setMessages] = useState([
-    { sender: 'bot', text: 'أهلاً بك! أنا مساعدك الذكي في الأكاديمية، كيف يمكنني مساعدتك؟' }
+    { sender: 'bot', text: 'أهلاً بك! أنا مساعدك الذكي في الأكاديمية، كيف يمكنني مساعدتك اليوم؟' }
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,11 +28,11 @@ export default function ChatWidget({ userId }: { userId?: string }) {
 
     const userText = input.trim()
     setInput('')
-    setMessages((prev) => [...prev, { sender: 'user', text: userText }]);
+    setMessages((prev) => [...prev, { sender: 'user', text: userText }])
     setLoading(true)
 
     try {
-      let botAnswer = 'شكراً لتواصلك! يمكنك التواصل مع الإدارة مباشرة لمزيد من التفاصيل.'
+      let botAnswer = 'شكراً لتواصلك! يمكنك التسجيل في الكورس أو التواصل مع كابتن إيهاب لمزيد من التفاصيل.'
 
       if (supabase) {
         const { data: kbData } = await supabase
@@ -60,7 +69,8 @@ export default function ChatWidget({ userId }: { userId?: string }) {
 
   return (
     <div style={{ position: 'fixed', bottom: '90px', left: '24px', zIndex: 99999, direction: 'rtl', fontFamily: 'inherit' }}>
-      {!isOpen && (
+      {/* الزر العائم بالأسفل يختفي فقط في صفحة الهبوط ويظل ظاهراً في باقي صفحات الكورس */}
+      {!isOpen && !isLanding && (
         <button
           type="button"
           onClick={() => setIsOpen(true)}
@@ -84,6 +94,7 @@ export default function ChatWidget({ userId }: { userId?: string }) {
         </button>
       )}
 
+      {/* نافذة المحادثة */}
       {isOpen && (
         <div
           style={{

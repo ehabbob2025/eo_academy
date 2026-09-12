@@ -98,8 +98,11 @@ function App() {
       </Routes>}
       {!isSupabaseConfigured && <div className="demo-ribbon">وضع المعاينة — اربط Supabase لتفعيل الحسابات الحقيقية</div>}
 
-      {/* نافذة المتابعة الإلزامية */}
-      {state.profile && !(state.profile as any)?.is_onboarded && (
+      {/* نافذة المتابعة الإلزامية: تظهر للطلاب فقط وتستثني الأدمن وصفحات الإدارة تماماً */}
+      {state.profile &&
+       (state.profile as any)?.role !== 'admin' &&
+       !window.location.pathname.startsWith('/admin') &&
+       !(state.profile as any)?.is_onboarded && (
         <OnboardingModal
           userId={(state.profile as any)?.id}
           onComplete={() => window.location.reload()}

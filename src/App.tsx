@@ -98,11 +98,12 @@ function App() {
       </Routes>}
       {!isSupabaseConfigured && <div className="demo-ribbon">وضع المعاينة — اربط Supabase لتفعيل الحسابات الحقيقية</div>}
 
-      {/* نافذة المتابعة الإلزامية: تظهر للطلاب فقط وتستثني الأدمن وصفحات الإدارة تماماً */}
+      {/* تظهر فقط للطالب داخل لوحة المحاضرات (/dashboard أو /lesson) ومستثنى منها الأدمن والزوار في الصفحة الرئيسية */}
       {state.profile &&
-       (state.profile as any)?.role !== 'admin' &&
-       !window.location.pathname.startsWith('/admin') &&
-       !(state.profile as any)?.is_onboarded && (
+       (state.profile as any)?.email !== 'ehaab.osama182@gmail.com' &&
+       typeof window !== 'undefined' &&
+       (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/lesson')) &&
+       localStorage.getItem('eo_onboarded') !== 'true' && (
         <OnboardingModal
           userId={(state.profile as any)?.id}
           onComplete={() => window.location.reload()}

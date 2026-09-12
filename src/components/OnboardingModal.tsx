@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from './lib/supabase';
-
+import { supabase } from '../lib/supabase';
 const PLATFORMS = [
   { id: 'youtube', name: 'قناة اليوتيوب', url: 'https://youtube.com/@yourchannel', icon: '📺' },
   { id: 'facebook', name: 'صفحة فيسبوك', url: 'https://facebook.com/yourpage', icon: '📘' },

@@ -1,20 +1,18 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { course } from '../data/demo'
 import * as DemoData from '../data/demo'
 
 export function LessonPage({ state }: { state: any }) {
   const { lessonId } = useParams<{ lessonId: string }>()
 
-  // 1. حساب المحاضرات السابقة والتالية بدقة متوافقة مع TypeScript
-  const allLessons: any[] = (course as any)?.lessons || (DemoData as any)?.lessons || (state as any)?.lessons || (state as any)?.course?.lessons || []
+  // جلب المحاضرات وتحديد المحاضرة الحالية والتالية
+  const allLessons: any[] = (DemoData as any)?.lessons || (DemoData as any)?.course?.lessons || (state as any)?.lessons || []
   const currentIndex = allLessons.findIndex((l: any) => String(l?.id) === String(lessonId))
   const validIndex = currentIndex !== -1 ? currentIndex : 0
   const lesson: any = allLessons[validIndex] || allLessons[0] || {}
   const nextLesson: any = validIndex < allLessons.length - 1 ? allLessons[validIndex + 1] : null
   const prevLesson: any = validIndex > 0 ? allLessons[validIndex - 1] : null
 
-  // 2. إدارة التعليقات
   const [commentText, setCommentText] = useState('')
   const [comments, setComments] = useState<Array<{ name: string; date: string; text: string }>>([
     {
@@ -24,21 +22,14 @@ export function LessonPage({ state }: { state: any }) {
     }
   ])
 
-  // استخراج رابط يوتيوب بأمان تام
+  // استخراج رابط التضمين الآمن ليوتيوب بدون أخطاء نوع البيانات
   const getEmbedUrl = (rawUrl: any): string => {
-    if (!rawUrl || typeof rawUrl !== 'string') return 'https://www.youtube.com/embed/dQw4w9WgXcQ'
-    if (rawUrl.includes('embed/')) return rawUrl
-    if (rawUrl.includes('youtu.be/')) {
-      const parts = rawUrl.split('youtu.be/')
-      const id = parts ? parts.split('?')[0] : ''
-      return 'https://www.youtube.com/embed/' + id
-    }
-    if (rawUrl.includes('watch?v=')) {
-      const parts = rawUrl.split('watch?v=')
-      const id = parts ? parts.split('&')[0] : ''
-      return 'https://www.youtube.com/embed/' + id
-    }
-    return 'https://www.youtube.com/embed/' + rawUrl
+    if (!rawUrl || typeof rawUrl !== 'string') return ''
+    if (rawUrl.includes('/embed/')) return rawUrl
+    const match = rawUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)
+    if (match && match) return 'https://www.youtube.com/embed/' + match
+    if (rawUrl.length === 11) return 'https://www.youtube.com/embed/' + rawUrl
+    return rawUrl
   }
 
   const handleAddComment = () => {
@@ -116,105 +107,14 @@ export function LessonPage({ state }: { state: any }) {
         </p>
       </div>
 
-      {/* شريط التنقل (المحاضرة التالية + كل المحاضرات + السابقة) */}
-      <div style={{
-        backgroundColor: '#ffffff',
-        borderRadius: '16px',
-        padding: '16px 24px',
-        border: '1px solid #e5e7eb',
-        marginBottom: '24px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
-      }}>
-        {prevLesson ? (
-          <Link
-            to={`/lesson/${prevLesson.id}`}
-            style={{
-              textDecoration: 'none',
-              color: '#0e3b2e',
-              backgroundColor: '#f3f4f6',
-              padding: '10px 18px',
-              borderRadius: '12px',
-              fontWeight: '700',
-              fontSize: '13px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <span>→</span>
-            <span>المحاضرة السابقة</span>
-          </Link>
-        ) : (
-          <div />
-        )}
-
-        <Link
-          to="/dashboard"
-          style={{
-            textDecoration: 'none',
-            color: '#0e3b2e',
-            fontWeight: '700',
-            fontSize: '14px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
-        >
-          <span>📋</span>
-          <span>كل المحاضرات</span>
-        </Link>
-
-        {nextLesson ? (
-          <Link
-            to={`/lesson/${nextLesson.id}`}
-            style={{
-              textDecoration: 'none',
-              backgroundColor: '#0e3b2e',
-              color: '#ffffff',
-              padding: '12px 24px',
-              borderRadius: '12px',
-              fontWeight: '800',
-              fontSize: '14px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
-            }}
-          >
-            <span>المحاضرة التالية</span>
-            <span>←</span>
-          </Link>
-        ) : (
-          <Link
-            to="/project"
-            style={{
-              textDecoration: 'none',
-              backgroundColor: '#d4a017',
-              color: '#000000',
-              padding: '12px 20px',
-              borderRadius: '12px',
-              fontWeight: '800',
-              fontSize: '13px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <span>مشروع التخرج 🎓</span>
-          </Link>
-        )}
-      </div>
-
       {/* قسم التعليقات */}
       <div style={{
         backgroundColor: '#ffffff',
         borderRadius: '16px',
         padding: '24px',
         border: '1px solid #e5e7eb',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+        boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+        marginBottom: '24px'
       }}>
         <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0e3b2e', marginBottom: '6px' }}>
           آراء وتعليقات الطلاب
@@ -308,6 +208,50 @@ export function LessonPage({ state }: { state: any }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* زر المحاضرة التالية البديل لزر كل المحاضرات القديم */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0' }}>
+        {prevLesson ? (
+          <Link
+            to={`/lesson/${prevLesson.id}`}
+            style={{
+              textDecoration: 'none',
+              color: '#0e3b2e',
+              backgroundColor: '#f3f4f6',
+              padding: '10px 18px',
+              borderRadius: '12px',
+              fontWeight: '700',
+              fontSize: '13px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <span>→</span>
+            <span>المحاضرة السابقة</span>
+          </Link>
+        ) : <div />}
+
+        <Link
+          to={nextLesson ? `/lesson/${nextLesson.id}` : '/dashboard'}
+          style={{
+            textDecoration: 'none',
+            backgroundColor: '#0e3b2e',
+            color: '#ffffff',
+            padding: '12px 28px',
+            borderRadius: '12px',
+            fontWeight: '800',
+            fontSize: '15px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
+          }}
+        >
+          <span>{nextLesson ? 'المحاضرة التالية' : 'إنهاء الكورس والعودة للرئيسية'}</span>
+          <span>←</span>
+        </Link>
       </div>
 
     </div>

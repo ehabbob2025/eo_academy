@@ -113,7 +113,7 @@ export function LessonPage({ state }: { state: CourseState }) {
         </p>
       </div>
 
-      {/* شريط التنقل بين المحاضرات (أزرار التالي والسابق وكل المحاضرات) */}
+      {/* شريط أزرار التنقل (المحاضرة التالية + كل المحاضرات + المحاضرة السابقة) */}
       <div style={{
         backgroundColor: '#ffffff',
         borderRadius: '16px',
@@ -125,7 +125,6 @@ export function LessonPage({ state }: { state: CourseState }) {
         alignItems: 'center',
         boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
       }}>
-        {/* زر المحاضرة السابقة */}
         {prevLesson ? (
           <Link
             to={`/lesson/${prevLesson.id}`}
@@ -149,7 +148,6 @@ export function LessonPage({ state }: { state: CourseState }) {
           <div />
         )}
 
-        {/* زر كل المحاضرات في المنتصف */}
         <Link
           to="/dashboard"
           style={{
@@ -166,7 +164,6 @@ export function LessonPage({ state }: { state: CourseState }) {
           <span>كل المحاضرات</span>
         </Link>
 
-        {/* زر المحاضرة التالية البارز بالأخضر */}
         {nextLesson ? (
           <Link
             to={`/lesson/${nextLesson.id}`}
@@ -208,7 +205,7 @@ export function LessonPage({ state }: { state: CourseState }) {
         )}
       </div>
 
-      {/* قسم التعليقات والآراء */}
+      {/* قسم التعليقات */}
       <div style={{
         backgroundColor: '#ffffff',
         borderRadius: '16px',
@@ -223,7 +220,6 @@ export function LessonPage({ state }: { state: CourseState }) {
           شارك رأيك أو سؤالك عن المحاضرة باحترام.
         </p>
 
-        {/* صندوق كتابة التعليق */}
         <div style={{ marginBottom: '24px' }}>
           <textarea
             value={commentText}
@@ -272,7 +268,6 @@ export function LessonPage({ state }: { state: CourseState }) {
           </div>
         </div>
 
-        {/* قائمة التعليقات السابقة */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {comments.map((c, i) => (
             <div

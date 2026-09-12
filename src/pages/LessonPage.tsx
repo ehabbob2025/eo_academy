@@ -302,4 +302,23 @@ export function LessonPage({ state }: { state: CourseState }) {
                   fontWeight: '700',
                   fontSize: '14px'
                 }}>
-                  {c.name.charAt(0).
+                  {c.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontWeight: '700', fontSize: '13px', color: '#111827' }}>{c.name}</div>
+                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>{c.date}</div>
+                </div>
+              </div>
+              <p style={{ margin: 0, fontSize: '13px', color: '#374151', lineHeight: '1.6' }}>
+                {c.text}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  )
+}
+
+export default LessonPage

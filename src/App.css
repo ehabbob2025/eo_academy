@@ -436,3 +436,13 @@ textarea { resize: vertical; }
 
 .student-logout { border: 0; background: transparent; color: #b8cec5; padding: 6px; cursor: pointer; border-radius: 8px; }
 .student-logout:hover { color: var(--gold); background: rgba(255,255,255,.08); }
+/* إخفاء شريط تقدم المشاهدة نهائياً */
+.lesson-watch-progress {
+  display: none !important;
+}
+
+/* إظهار نص زر المحاضرة التالية باللون الأبيض الواضح */
+.lesson-navigation .primary-button,
+.lesson-navigation .primary-button span {
+  color: #ffffff !important;
+}

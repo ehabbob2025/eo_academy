@@ -1,5 +1,5 @@
-import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, Loader2, LockKeyhole, MessageCircle, PlayCircle, Send, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, CheckCircle2, Loader2, LockKeyhole, MessageCircle, PlayCircle, Send, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -29,18 +29,26 @@ export function LessonPage({ state }: { state: any }) {
   const [commentDeleting, setCommentDeleting] = useState('')
   const [commentError, setCommentError] = useState('')
 
+  // حالات تتبع وقت مشاهدة المحاضرة وشريط التقدم
+  const totalDurationSeconds = Math.max(60, (lesson?.duration_minutes || 10) * 60)
+  const [watchedSeconds, setWatchedSeconds] = useState(0)
+  const [isWatchedEnough, setIsWatchedEnough] = useState(false)
+
   const currentIndex = allLessons.findIndex((item: any) => String(item.id) === String(lessonId))
   const nextLesson = currentIndex !== -1 && currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null
 
-  // إتاحة الانتقال للمحاضرة التالية فور اجتياز الاختبار
-  const canProceed = !lesson?.quizEnabled || Boolean(lesson?.quizPassed) || Boolean(result?.passed)
+  // شرط الانتقال للمحاضرة التالية: مشاهدة 85% على الأقل + اجتياز الاختبار (إن وجد)
+  const canProceed = isWatchedEnough && (!lesson?.quizEnabled || Boolean(lesson?.quizPassed) || Boolean(result?.passed))
 
   useEffect(() => {
     setVideoId(lesson?.youtubeVideoId || (lesson?.position === 1 ? '6vmVtWChcoo' : ''))
     setResult(null)
     setSelected({})
+    setWatchedSeconds(0)
+    setIsWatchedEnough(false)
   }, [lessonId])
 
+  // تحميل تفاصيل الفيديو من جدول lesson_media
   useEffect(() => {
     if (!supabase || !lesson?.id) return
     const loadVideo = async () => {
@@ -50,6 +58,75 @@ export function LessonPage({ state }: { state: any }) {
     void loadVideo()
   }, [lesson?.id])
 
+  // تحميل وتتبع وقت المشاهدة والتقدم من قاعدة البيانات
+  useEffect(() => {
+    if (!supabase || !lesson?.id) return
+    let cancelled = false
+
+    const initProgress = async () => {
+      const { data: auth } = await supabase.auth.getUser()
+      const userId = auth.user?.id
+      if (!userId || cancelled) return
+      setCommentUserId(userId)
+
+      const { data: progressData } = await supabase
+        .from('lesson_progress')
+        .select('watched_seconds, completed')
+        .eq('user_id', userId)
+        .eq('lesson_id', lesson.id)
+        .maybeSingle()
+
+      if (progressData && !cancelled) {
+        const savedSecs = progressData.watched_seconds || 0
+        setWatchedSeconds(savedSecs)
+        if (savedSecs >= totalDurationSeconds * 0.85 || progressData.completed) {
+          setIsWatchedEnough(true)
+        }
+      }
+    }
+
+    void initProgress()
+    return () => { cancelled = true }
+  }, [lesson?.id, totalDurationSeconds])
+
+  // مؤقت حساب وقت المشاهدة أثناء تواجد الطالب في الصفحة ونشاطه
+  useEffect(() => {
+    if (!supabase || !commentUserId || !lesson?.id || isWatchedEnough) return
+
+    const interval = window.setInterval(async () => {
+      if (document.visibilityState === 'visible') {
+        setWatchedSeconds((prev) => {
+          const next = prev + 1
+          const threshold = totalDurationSeconds * 0.85
+          if (next >= threshold && !isWatchedEnough) {
+            setIsWatchedEnough(true)
+            // حفظ حالة الإكمال في قاعدة البيانات
+            void supabase.from('lesson_progress').upsert({
+              user_id: commentUserId,
+              lesson_id: lesson.id,
+              watched_seconds: next,
+              completed: true,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id,lesson_id' })
+          } else if (next % 10 === 0) {
+            // حفظ دوري كل 10 ثوانٍ لتجنب فقدان التقدم
+            void supabase.from('lesson_progress').upsert({
+              user_id: commentUserId,
+              lesson_id: lesson.id,
+              watched_seconds: next,
+              completed: next >= threshold,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id,lesson_id' })
+          }
+          return next
+        })
+      }
+    }, 1000)
+
+    return () => window.clearInterval(interval)
+  }, [commentUserId, lesson?.id, isWatchedEnough, totalDurationSeconds])
+
+  // تحميل أسئلة الاختبار
   useEffect(() => {
     if (!supabase || !lesson?.id || !lesson?.quizEnabled) return
     const loadQuestions = async () => {
@@ -62,23 +139,17 @@ export function LessonPage({ state }: { state: any }) {
     void loadQuestions()
   }, [lesson?.id, lesson?.quizEnabled])
 
+  // تحميل تعليقات المحاضرة
   useEffect(() => {
     if (!supabase || !lesson?.id) return
     let cancelled = false
     const loadComments = async () => {
       setCommentsLoading(true)
       setCommentError('')
-      const [{ data: auth }, { data, error: loadError }] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase.from('lesson_comments').select('id,lesson_id,user_id,author_name,body,created_at').eq('lesson_id', lesson.id).order('created_at', { ascending: false }),
-      ])
+      const { data, error: loadError } = await supabase.from('lesson_comments').select('id,lesson_id,user_id,author_name,body,created_at').eq('lesson_id', lesson.id).order('created_at', { ascending: false })
       if (cancelled) return
-      setCommentUserId(auth.user?.id || '')
-      if (loadError) {
-        setComments([])
-      } else {
-        setComments((data || []) as LessonComment[])
-      }
+      if (loadError) setComments([])
+      else setComments((data || []) as LessonComment[])
       setCommentsLoading(false)
     }
     void loadComments()
@@ -127,6 +198,7 @@ export function LessonPage({ state }: { state: any }) {
   }
 
   const currentVideoId = videoId || (lesson?.position === 1 ? '6vmVtWChcoo' : '')
+  const progressPercent = Math.min(100, Math.round((watchedSeconds / totalDurationSeconds) * 100))
 
   return (
     <div className="lesson-page">
@@ -151,18 +223,36 @@ export function LessonPage({ state }: { state: any }) {
         </div>
       )}
 
-      {/* قسم الاختبار: متاح ومفتوح مباشرة للطالب ليجتازه وينتقل للمحاضرة التالية */}
+      {/* شريط تقدم مشاهدة المحاضرة (85% لتفعيل الاختبار) */}
+      <div className="lesson-progress-box" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '16px 20px', borderRadius: '12px', margin: '20px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>
+          <span>نسبة مشاهدة المحاضرة ({progressPercent}%)</span>
+          <span>{isWatchedEnough ? '✅ تم إكمال النسبة المطلوبة (85%)' : 'يجب مشاهدة 85% لفتح الاختبار'}</span>
+        </div>
+        <div style={{ width: '100%', height: '10px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden' }}>
+          <div style={{ width: `${progressPercent}%`, height: '100%', background: isWatchedEnough ? '#10b981' : '#0e3b2e', transition: 'width 0.5s ease' }} />
+        </div>
+      </div>
+
+      {/* قسم الاختبار: مقفل حتى تتم مشاهدة 85% من المحاضرة */}
       {lesson.quizEnabled && (
         <section className="quiz-section">
           <div className="section-heading">
             <div>
               <span className="eyebrow">اختبار المحاضرة</span>
               <h2>اتأكد إن المعلومة وصلت</h2>
-              <p>اجتز الاختبار لفتح المحاضرة التالية بنجاح.</p>
+              <p>{isWatchedEnough ? 'اجتز الاختبار لفتح المحاضرة التالية بنجاح.' : '🔒 أكمل مشاهدة 85% من المحاضرة أولاً لفتح الاختبار والتفاعل معه.'}</p>
             </div>
             <span className="score-rule">درجة النجاح 70%</span>
           </div>
-          {questionsLoading ? (
+
+          {!isWatchedEnough ? (
+            <div className="chat-state" style={{ padding: '30px', textAlign: 'center', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', color: '#991b1b' }}>
+              <LockKeyhole size={36} style={{ marginBottom: '10px' }} />
+              <strong>الاختبار مغلق حالياً</strong>
+              <p style={{ marginTop: '5px' }}>فضلاً تابع مشاهدة المحاضرة ليصل مؤشر التقدم إلى 85% ويتم فتح الأسئلة تلقائياً.</p>
+            </div>
+          ) : questionsLoading ? (
             <div className="chat-state"><Loader2 className="spin"/> جاري تحميل الاختبار...</div>
           ) : questions.length === 0 ? (
             <p className="muted">الاختبار لم يُضف بعد لهذه المحاضرة.</p>
@@ -249,76 +339,31 @@ export function LessonPage({ state }: { state: any }) {
         )}
       </section>
 
-      {/* زر المحاضرة التالية بنص أبيض واضح في جهة اليمين */}
-      <div
-        className="lesson-navigation"
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-start',
-          alignItems: 'center',
-          marginTop: '32px',
-          marginBottom: '20px'
-        }}
-      >
+      {/* زر المحاضرة التالية */}
+      <div className="lesson-navigation" style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginTop: '32px', marginBottom: '20px' }}>
         {nextLesson ? (
           canProceed ? (
             <Link
               to={"/lesson/" + nextLesson.id}
               className="primary-button"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '10px',
-                textDecoration: 'none',
-                backgroundColor: '#0e3b2e',
-                color: '#ffffff',
-                padding: '14px 32px',
-                fontSize: '16px',
-                borderRadius: '12px',
-                fontWeight: '800',
-                boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
-              }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', textDecoration: 'none', backgroundColor: '#0e3b2e', color: '#ffffff', padding: '14px 32px', fontSize: '16px', borderRadius: '12px', fontWeight: '800', boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)' }}
             >
               <span style={{ color: '#ffffff' }}>المحاضرة التالية</span>
               <ArrowLeft size={18} color="#ffffff" />
             </Link>
           ) : (
             <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '10px',
-                backgroundColor: '#f3f4f6',
-                color: '#6b7280',
-                padding: '14px 28px',
-                fontSize: '15px',
-                borderRadius: '12px',
-                cursor: 'not-allowed',
-                fontWeight: '700',
-                border: '1px solid #d1d5db'
-              }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', backgroundColor: '#f3f4f6', color: '#6b7280', padding: '14px 28px', fontSize: '15px', borderRadius: '12px', cursor: 'not-allowed', fontWeight: '700', border: '1px solid #d1d5db' }}
             >
               <LockKeyhole size={18} color="#6b7280" />
-              <span>المحاضرة التالية (يلزم اجتياز اختبار المحاضرة أولاً)</span>
+              <span>المحاضرة التالية (يلزم مشاهدة 85% واجتياز الاختبار أولاً)</span>
             </div>
           )
         ) : (
           <Link
             to="/project"
             className="primary-button"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '10px',
-              textDecoration: 'none',
-              backgroundColor: '#d4a017',
-              color: '#000000',
-              padding: '14px 32px',
-              fontSize: '16px',
-              borderRadius: '12px',
-              fontWeight: '800',
-              boxShadow: '0 4px 15px rgba(212, 160, 23, 0.25)'
-            }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', textDecoration: 'none', backgroundColor: '#d4a017', color: '#000000', padding: '14px 32px', fontSize: '16px', borderRadius: '12px', fontWeight: '800', boxShadow: '0 4px 15px rgba(212, 160, 23, 0.25)' }}
           >
             <span style={{ color: '#000000' }}>مشروع التخرج 🎓</span>
             <ArrowLeft size={18} color="#000000" />

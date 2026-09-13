@@ -32,7 +32,7 @@ export function LessonPage({ state }: { state: any }) {
   const currentIndex = allLessons.findIndex((item: any) => String(item.id) === String(lessonId))
   const nextLesson = currentIndex !== -1 && currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null
 
-  // إتاحة زر المحاضرة التالية إذا اجتاز الاختبار أو إذا كانت المحاضرة بدون اختبار
+  // إتاحة الانتقال للمحاضرة التالية فور اجتياز الاختبار
   const canProceed = !lesson?.quizEnabled || Boolean(lesson?.quizPassed) || Boolean(result?.passed)
 
   useEffect(() => {
@@ -97,7 +97,9 @@ export function LessonPage({ state }: { state: any }) {
     if (error || !data) { setError('تعذر تصحيح الاختبار. راجع إجاباتك وجرّب تاني.'); return }
     const quizResult = data as QuizResult
     setResult(quizResult)
-    if (quizResult.passed && state?.passLesson) state.passLesson(lesson.id)
+    if (quizResult.passed && state?.passLesson) {
+      state.passLesson(lesson.id)
+    }
   }
 
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
@@ -149,7 +151,7 @@ export function LessonPage({ state }: { state: any }) {
         </div>
       )}
 
-      {/* قسم الاختبار */}
+      {/* قسم الاختبار: متاح ومفتوح مباشرة للطالب ليجتازه وينتقل للمحاضرة التالية */}
       {lesson.quizEnabled && (
         <section className="quiz-section">
           <div className="section-heading">
@@ -217,6 +219,7 @@ export function LessonPage({ state }: { state: any }) {
             </button>
           </div>
         </form>
+        {commentError && <p className="form-error" role="alert">{commentError}</p>}
         {commentsLoading ? (
           <div className="comments-state"><Loader2 className="spin"/> جاري تحميل التعليقات...</div>
         ) : comments.length === 0 ? (
@@ -246,7 +249,7 @@ export function LessonPage({ state }: { state: any }) {
         )}
       </section>
 
-      {/* أزرار التنقل */}
+      {/* زر المحاضرة التالية بنص أبيض واضح في جهة اليمين */}
       <div
         className="lesson-navigation"
         style={{

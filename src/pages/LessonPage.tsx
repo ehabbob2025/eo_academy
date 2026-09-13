@@ -17,9 +17,6 @@ export function LessonPage({ state }: { state: any }) {
   const [requiredSeconds, setRequiredSeconds] = useState(0)
   const [durationSeconds, setDurationSeconds] = useState(Math.max(lesson?.durationMinutes || 1, 1) * 60)
   const [videoId, setVideoId] = useState(lesson?.youtubeVideoId || '')
-  
-  // تفعيل المراقبة عند تشغيل الفيديو
-  const [isPlaying, setIsPlaying] = useState(false)
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [questionsLoading, setQuestionsLoading] = useState(false)
@@ -35,35 +32,6 @@ export function LessonPage({ state }: { state: any }) {
   const [commentError, setCommentError] = useState('')
   const nextLesson = useMemo(() => state?.lessons?.find((item: any) => item.position === (lesson?.position || 0) + 1), [state?.lessons, lesson])
 
-  // التقاط إشارات يوتيوب الحقيقية عند التشغيل والإيقاف
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (!event.origin.includes('youtube.com')) return
-      try {
-        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-        const pState = data?.info?.playerState !== undefined ? data.info.playerState : data?.info
-        
-        // 1 تعني التشغيل
-        if (pState === 1) {
-          setIsPlaying(true)
-          setTrackingActive(true)
-        } else if (pState === 2 || pState === 0) {
-          setIsPlaying(false)
-        }
-
-        // قراءة توقيت الفيديو الفعلي من يوتيوب
-        if (typeof data?.info?.currentTime === 'number') {
-          const current = Math.floor(data.info.currentTime)
-          setDisplayWatchedSeconds(current)
-          setWatchedSeconds(current)
-        }
-      } catch {}
-    }
-
-    window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
-  }, [])
-
   useEffect(() => {
     const initialWatchedSeconds = lesson?.quizPassed ? Math.max(lesson.durationMinutes, 1) * 60 : 0
     setWatchedSeconds(initialWatchedSeconds)
@@ -72,12 +40,11 @@ export function LessonPage({ state }: { state: any }) {
     setRequiredSeconds(Math.ceil(Math.max(lesson?.durationMinutes || 1, 1) * 60 * .85))
     setDurationSeconds(Math.max(lesson?.durationMinutes || 1, 1) * 60)
     setVideoId(lesson?.youtubeVideoId || '')
-    setIsPlaying(false)
     setResult(null)
     setSelected({})
   }, [lesson?.id])
 
-  const watched = watchedSeconds >= requiredSeconds && requiredSeconds > 0
+  const watched = displayWatchedSeconds >= requiredSeconds && requiredSeconds > 0
 
   useEffect(() => {
     if (lesson && watched && !lesson.quizEnabled && lesson.status !== 'completed') {
@@ -98,12 +65,12 @@ export function LessonPage({ state }: { state: any }) {
     void loadProgress()
   }, [lesson?.id])
 
-  // إرسال التقدم لقاعدة البيانات كل 10 ثوانٍ أثناء التشغيل
+  // تسجيل التقدم كل 10 ثوانٍ في Supabase
   useEffect(() => {
-    if (!supabase || !lesson || !videoId || watched || !isPlaying) return
+    if (!supabase || !lesson || !videoId || watched) return
     const client = supabase
     const recordWatch = async () => {
-      if (document.visibilityState !== 'visible' || !isPlaying) return
+      if (document.visibilityState !== 'visible') return
       const { data, error: watchError } = await client.rpc('record_lesson_watch', { p_lesson_id: lesson.id, p_increment_seconds: 10 })
       if (watchError || !data) {
         setTrackingActive(false)
@@ -119,17 +86,17 @@ export function LessonPage({ state }: { state: any }) {
     void recordWatch()
     const timer = window.setInterval(() => { void recordWatch() }, 10000)
     return () => window.clearInterval(timer)
-  }, [lesson?.id, videoId, watched, isPlaying])
+  }, [lesson?.id, videoId, watched])
 
-  // زيادة العداد ثانية بثانية فور تشغيل الفيديو
+  // حساب ثواني حضور الطالب في المحاضرة
   useEffect(() => {
-    if (!lesson || !videoId || watched || !isPlaying) return
+    if (!lesson || !videoId || watched) return
     const timer = window.setInterval(() => {
-      if (document.visibilityState !== 'visible' || !isPlaying) return
+      if (document.visibilityState !== 'visible') return
       setDisplayWatchedSeconds((current) => Math.min(current + 1, durationSeconds))
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [lesson?.id, videoId, watched, durationSeconds, isPlaying])
+  }, [lesson?.id, videoId, watched, durationSeconds])
 
   useEffect(() => {
     if (!supabase || !lesson) return
@@ -236,25 +203,12 @@ export function LessonPage({ state }: { state: any }) {
       <div className="breadcrumb"><Link to="/dashboard">الرئيسية</Link><ArrowLeft size={15} /><span>المحاضرة {lesson.position}</span></div>
       <header className="lesson-header"><span className="eyebrow">المحاضرة {lesson.position} من {state?.lessons?.length || 5}</span><h1>{lesson.title}</h1><p>{lesson.description}</p></header>
 
-      {/* مشغل الفيديو: يبدأ الحساب فور الضغط على الفيديو */}
+      {/* مشغل الفيديو */}
       {currentVideoId ? (
-        <div 
-          className="video-frame" 
-          onClick={() => { setIsPlaying(true); setTrackingActive(true); }}
-          onMouseEnter={() => {
-            const iframe = document.getElementById('lesson-youtube-iframe') as HTMLIFrameElement
-            iframe?.contentWindow?.postMessage('{"event":"listening"}', '*')
-          }}
-        >
+        <div className="video-frame">
           <iframe
-            id="lesson-youtube-iframe"
-            src={"https://www.youtube.com/embed/" + currentVideoId + "?enablejsapi=1&rel=0&modestbranding=1"}
+            src={"https://www.youtube.com/embed/" + currentVideoId + "?rel=0&modestbranding=1"}
             title={lesson.title}
-            onLoad={(e) => {
-              try {
-                (e.target as HTMLIFrameElement)?.contentWindow?.postMessage('{"event":"listening"}', '*')
-              } catch {}
-            }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
           />
@@ -378,7 +332,7 @@ export function LessonPage({ state }: { state: any }) {
         )}
       </section>
 
-      {/* زر المحاضرة التالية الواضح بالأبيض */}
+      {/* شريط التنقل: زر المحاضرة التالية مقفول إجبارياً حتى انتهاء وقت المحاضرة */}
       <div
         className="lesson-navigation"
         style={{
@@ -390,25 +344,46 @@ export function LessonPage({ state }: { state: any }) {
         }}
       >
         {nextLesson ? (
-          <Link
-            to={"/lesson/" + nextLesson.id}
-            className="primary-button"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '10px',
-              textDecoration: 'none',
-              backgroundColor: '#0e3b2e',
-              color: '#ffffff',
-              padding: '12px 28px',
-              fontSize: '15px',
-              borderRadius: '12px',
-              boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
-            }}
-          >
-            <span style={{ color: '#ffffff', fontWeight: '800' }}>المحاضرة التالية</span>
-            <ArrowLeft size={18} color="#ffffff" />
-          </Link>
+          watched ? (
+            <Link
+              to={"/lesson/" + nextLesson.id}
+              className="primary-button"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                textDecoration: 'none',
+                backgroundColor: '#0e3b2e',
+                color: '#ffffff',
+                padding: '12px 28px',
+                fontSize: '15px',
+                borderRadius: '12px',
+                boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
+              }}
+            >
+              <span style={{ color: '#ffffff', fontWeight: '800' }}>المحاضرة التالية</span>
+              <ArrowLeft size={18} color="#ffffff" />
+            </Link>
+          ) : (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                backgroundColor: '#e5e7eb',
+                color: '#6b7280',
+                padding: '12px 28px',
+                fontSize: '14px',
+                borderRadius: '12px',
+                cursor: 'not-allowed',
+                fontWeight: '700',
+                border: '1px solid #d1d5db'
+              }}
+            >
+              <LockKeyhole size={18} color="#6b7280" />
+              <span>المحاضرة التالية (مقفولة حتى إكمال المدة)</span>
+            </div>
+          )
         ) : (
           <Link
             to="/project"

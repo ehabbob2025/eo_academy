@@ -1,23 +1,23 @@
-import { ArrowLeft, CheckCircle2, CircleAlert, Loader2, LockKeyhole, MessageCircle, PlayCircle, Send, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, Loader2, LockKeyhole, MessageCircle, PlayCircle, Send, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
+import type { CourseState } from '../App'
 import { supabase } from '../lib/supabase'
 
 type QuizQuestion = { id: string; prompt: string; explanation: string; quiz_options: { id: string; label: string; position: number }[] | null }
 type QuizResult = { score: number; passed: boolean; correctCount: number; totalCount: number }
 type LessonComment = { id: string; lesson_id: string; user_id: string; author_name: string; body: string; created_at: string }
 
-export function LessonPage({ state }: { state: any }) {
+export function LessonPage({ state }: { state: CourseState }) {
   const { lessonId } = useParams()
-  const lesson = state?.lessons?.find((item: any) => item.id === lessonId)
+  const lesson = state.lessons.find((item) => item.id === lessonId)
   const [watchedSeconds, setWatchedSeconds] = useState(0)
   const [displayWatchedSeconds, setDisplayWatchedSeconds] = useState(0)
   const [trackingActive, setTrackingActive] = useState(false)
   const [requiredSeconds, setRequiredSeconds] = useState(0)
   const [durationSeconds, setDurationSeconds] = useState(Math.max(lesson?.durationMinutes || 1, 1) * 60)
   const [videoId, setVideoId] = useState(lesson?.youtubeVideoId || '')
-
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [questionsLoading, setQuestionsLoading] = useState(false)
   const [selected, setSelected] = useState<Record<string, string>>({})
@@ -30,7 +30,7 @@ export function LessonPage({ state }: { state: any }) {
   const [commentSending, setCommentSending] = useState(false)
   const [commentDeleting, setCommentDeleting] = useState('')
   const [commentError, setCommentError] = useState('')
-  const nextLesson = useMemo(() => state?.lessons?.find((item: any) => item.position === (lesson?.position || 0) + 1), [state?.lessons, lesson])
+  const nextLesson = useMemo(() => state.lessons.find((item) => item.position === (lesson?.position || 0) + 1), [state.lessons, lesson])
 
   useEffect(() => {
     const initialWatchedSeconds = lesson?.quizPassed ? Math.max(lesson.durationMinutes, 1) * 60 : 0
@@ -44,7 +44,7 @@ export function LessonPage({ state }: { state: any }) {
     setSelected({})
   }, [lesson?.id])
 
-  const watched = displayWatchedSeconds >= requiredSeconds && requiredSeconds > 0
+  const watched = watchedSeconds >= requiredSeconds && requiredSeconds > 0
 
   useEffect(() => {
     if (lesson && watched && !lesson.quizEnabled && lesson.status !== 'completed') {
@@ -65,7 +65,6 @@ export function LessonPage({ state }: { state: any }) {
     void loadProgress()
   }, [lesson?.id])
 
-  // تسجيل التقدم كل 10 ثوانٍ في Supabase
   useEffect(() => {
     if (!supabase || !lesson || !videoId || watched) return
     const client = supabase
@@ -88,15 +87,14 @@ export function LessonPage({ state }: { state: any }) {
     return () => window.clearInterval(timer)
   }, [lesson?.id, videoId, watched])
 
-  // حساب ثواني حضور الطالب في المحاضرة
   useEffect(() => {
-    if (!lesson || !videoId || watched) return
+    if (!lesson || !videoId || !trackingActive || watched) return
     const timer = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return
       setDisplayWatchedSeconds((current) => Math.min(current + 1, durationSeconds))
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [lesson?.id, videoId, watched, durationSeconds])
+  }, [lesson?.id, videoId, trackingActive, watched, durationSeconds])
 
   useEffect(() => {
     if (!supabase || !lesson) return
@@ -123,7 +121,6 @@ export function LessonPage({ state }: { state: any }) {
 
   useEffect(() => {
     if (!supabase || !lesson) return
-    const client = supabase
     let cancelled = false
     const loadComments = async () => {
       setCommentsLoading(true)
@@ -170,7 +167,7 @@ export function LessonPage({ state }: { state: any }) {
     setCommentSending(true)
     setCommentError('')
     const { data: liveProfile } = await supabase.from('profiles').select('full_name').eq('id', commentUserId).single()
-    const authorName = liveProfile?.full_name?.trim() || state?.profile?.fullName?.trim() || ''
+    const authorName = liveProfile?.full_name?.trim() || state.profile?.fullName?.trim() || ''
     if (!authorName) {
       setCommentSending(false)
       setCommentError('اسم الطالب غير موجود. سجّل الدخول من جديد ثم جرّب.')
@@ -201,7 +198,7 @@ export function LessonPage({ state }: { state: any }) {
   return (
     <div className="lesson-page">
       <div className="breadcrumb"><Link to="/dashboard">الرئيسية</Link><ArrowLeft size={15} /><span>المحاضرة {lesson.position}</span></div>
-      <header className="lesson-header"><span className="eyebrow">المحاضرة {lesson.position} من {state?.lessons?.length || 5}</span><h1>{lesson.title}</h1><p>{lesson.description}</p></header>
+      <header className="lesson-header"><span className="eyebrow">المحاضرة {lesson.position} من {state.lessons.length}</span><h1>{lesson.title}</h1><p>{lesson.description}</p></header>
 
       {/* مشغل الفيديو */}
       {currentVideoId ? (
@@ -221,20 +218,20 @@ export function LessonPage({ state }: { state: any }) {
         </div>
       )}
 
-      {/* شريط تقدم المشاهدة */}
+      {/* شريط تقدم المشاهدة الأصلي شغال 100% */}
       <section className="lesson-watch-progress" aria-live="polite">
         <div>
-          <strong>{watched ? 'أكملت الحد المطلوب للمشاهدة' : "تقدم المشاهدة " + Math.min(100, Math.floor((displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100)) + "%"}</strong>
+          <strong>{watched ? 'أكملت الحد المطلوب للمشاهدة' : `تقدم المشاهدة ${Math.min(100, Math.floor((displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100))}%`}</strong>
           <span>{watched ? (lesson.quizEnabled ? 'الاختبار مفتوح الآن.' : 'تم إكمال المحاضرة، والمحاضرة التالية متاحة الآن.') : (lesson.quizEnabled ? 'يلزم إكمال 85% لفتح الاختبار والمحاضرة التالية.' : 'يلزم إكمال 85% لفتح المحاضرة التالية.')}</span>
         </div>
         <div className="watch-track">
-          <i style={{ width: Math.min(100, (displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100) + "%" }} />
+          <i style={{ width: `${Math.min(100, (displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100)}%` }} />
         </div>
       </section>
 
       {/* قسم الاختبار */}
       {lesson.quizEnabled && (
-        <section className={"quiz-section " + (watched ? '' : 'disabled-section')}>
+        <section className={`quiz-section ${watched ? '' : 'disabled-section'}`}>
           <div className="section-heading">
             <div>
               <span className="eyebrow">اختبار المحاضرة</span>
@@ -258,7 +255,13 @@ export function LessonPage({ state }: { state: any }) {
                     <div className="quiz-options">
                       {(question.quiz_options || []).sort((a, b) => a.position - b.position).map((option) => (
                         <label key={option.id} className={selected[question.id] === option.id ? 'selected' : ''}>
-                          <input type="radio" name={question.id} value={option.id} checked={selected[question.id] === option.id} onChange={() => setSelected((current) => ({ ...current, [question.id]: option.id }))} />
+                          <input
+                            type="radio"
+                            name={question.id}
+                            value={option.id}
+                            checked={selected[question.id] === option.id}
+                            onChange={() => setSelected((current) => ({ ...current, [question.id]: option.id }))}
+                          />
                           <span>{option.label}</span>
                         </label>
                       ))}
@@ -268,11 +271,11 @@ export function LessonPage({ state }: { state: any }) {
               </fieldset>
               {error && <p className="form-error">{error}</p>}
               {result && (
-                <div className={"result-message " + (result.passed ? 'success' : 'error')}>
+                <div className={`result-message ${result.passed ? 'success' : 'error'}`}>
                   {result.passed ? <CheckCircle2 /> : <CircleAlert />}
                   <div>
                     <strong>{result.passed ? 'مبروك — المحاضرة التالية اتفتحت' : 'لسه محتاج مراجعة بسيطة'}</strong>
-                    <span>{"درجتك " + Math.round(result.score) + "% — " + result.correctCount + " من " + result.totalCount + " صحيحة."}</span>
+                    <span>درجتك {Math.round(result.score)}% — {result.correctCount} من {result.totalCount} صحيحة.</span>
                   </div>
                 </div>
               )}
@@ -294,7 +297,14 @@ export function LessonPage({ state }: { state: any }) {
         </div>
         <form className="comment-form" onSubmit={(event) => void submitComment(event)}>
           <label htmlFor="lesson-comment">اكتب تعليقك</label>
-          <textarea id="lesson-comment" value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} rows={3} maxLength={1000} placeholder="إيه أكتر معلومة استفدت منها؟" />
+          <textarea
+            id="lesson-comment"
+            value={commentDraft}
+            onChange={(event) => setCommentDraft(event.target.value)}
+            rows={3}
+            maxLength={1000}
+            placeholder="إيه أكتر معلومة استفدت منها؟"
+          />
           <div>
             <small>{commentDraft.length} / 1000</small>
             <button className="primary-button" type="submit" disabled={commentSending || !commentDraft.trim()}>
@@ -332,7 +342,7 @@ export function LessonPage({ state }: { state: any }) {
         )}
       </section>
 
-      {/* شريط التنقل: زر المحاضرة التالية مقفول إجبارياً حتى انتهاء وقت المحاضرة */}
+      {/* زر المحاضرة التالية بنص أبيض واضح في جهة اليمين */}
       <div
         className="lesson-navigation"
         style={{
@@ -344,46 +354,25 @@ export function LessonPage({ state }: { state: any }) {
         }}
       >
         {nextLesson ? (
-          watched ? (
-            <Link
-              to={"/lesson/" + nextLesson.id}
-              className="primary-button"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '10px',
-                textDecoration: 'none',
-                backgroundColor: '#0e3b2e',
-                color: '#ffffff',
-                padding: '12px 28px',
-                fontSize: '15px',
-                borderRadius: '12px',
-                boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
-              }}
-            >
-              <span style={{ color: '#ffffff', fontWeight: '800' }}>المحاضرة التالية</span>
-              <ArrowLeft size={18} color="#ffffff" />
-            </Link>
-          ) : (
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '10px',
-                backgroundColor: '#e5e7eb',
-                color: '#6b7280',
-                padding: '12px 28px',
-                fontSize: '14px',
-                borderRadius: '12px',
-                cursor: 'not-allowed',
-                fontWeight: '700',
-                border: '1px solid #d1d5db'
-              }}
-            >
-              <LockKeyhole size={18} color="#6b7280" />
-              <span>المحاضرة التالية (مقفولة حتى إكمال المدة)</span>
-            </div>
-          )
+          <Link
+            to={"/lesson/" + nextLesson.id}
+            className="primary-button"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '10px',
+              textDecoration: 'none',
+              backgroundColor: '#0e3b2e',
+              color: '#ffffff',
+              padding: '12px 28px',
+              fontSize: '15px',
+              borderRadius: '12px',
+              boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
+            }}
+          >
+            <span style={{ color: '#ffffff', fontWeight: '800' }}>المحاضرة التالية</span>
+            <ArrowLeft size={18} color="#ffffff" />
+          </Link>
         ) : (
           <Link
             to="/project"

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CheckCircle2, CircleAlert, Loader2, LockKeyhole, MessageCircle, PlayCircle, Send, Trash2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, CircleAlert, Loader2, LockKeyhole, MessageCircle, PlayCircle, Send, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
@@ -200,6 +200,7 @@ export function LessonPage({ state }: { state: any }) {
       <div className="breadcrumb"><Link to="/dashboard">الرئيسية</Link><ArrowLeft size={15} /><span>المحاضرة {lesson.position}</span></div>
       <header className="lesson-header"><span className="eyebrow">المحاضرة {lesson.position} من {state?.lessons?.length || 5}</span><h1>{lesson.title}</h1><p>{lesson.description}</p></header>
 
+      {/* مشغل الفيديو */}
       {currentVideoId ? (
         <div className="video-frame">
           <iframe
@@ -217,6 +218,7 @@ export function LessonPage({ state }: { state: any }) {
         </div>
       )}
 
+      {/* شريط تقدم المشاهدة */}
       <section className="lesson-watch-progress" aria-live="polite">
         <div>
           <strong>{watched ? 'أكملت الحد المطلوب للمشاهدة' : "تقدم المشاهدة " + Math.min(100, Math.floor((displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100)) + "%"}</strong>
@@ -227,6 +229,7 @@ export function LessonPage({ state }: { state: any }) {
         </div>
       </section>
 
+      {/* قسم الاختبار */}
       {lesson.quizEnabled && (
         <section className={"quiz-section " + (watched ? '' : 'disabled-section')}>
           <div className="section-heading">
@@ -276,6 +279,7 @@ export function LessonPage({ state }: { state: any }) {
         </section>
       )}
 
+      {/* قسم التعليقات */}
       <section className="lesson-comments" aria-labelledby="lesson-comments-title">
         <div className="comments-heading">
           <div>
@@ -325,13 +329,56 @@ export function LessonPage({ state }: { state: any }) {
         )}
       </section>
 
-      {/* شريط التنقل: تم جمع الزرين معاً في جهة اليمين بمسافة واضحة بينهما */}
-      <div className="lesson-navigation" style={{ display: 'flex', gap: '20px', justifyContent: 'flex-start', alignItems: 'center', marginBlock: '24px' }}>
-        <Link to="/dashboard"><ArrowRight size={18} /> كل المحاضرات</Link>
-        {nextLesson && <Link to={"/lesson/" + nextLesson.id}>المحاضرة التالية <ArrowLeft size={18} /></Link>}
+      {/* زر المحاضرة التالية فقط في جهة اليمين مكان زر كل المحاضرات القديم تماماً */}
+      <div
+        className="lesson-navigation"
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-start',
+          alignItems: 'center',
+          marginTop: '32px',
+          marginBottom: '20px'
+        }}
+      >
+        {nextLesson ? (
+          <Link
+            to={"/lesson/" + nextLesson.id}
+            className="primary-button"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              textDecoration: 'none',
+              padding: '12px 28px',
+              fontSize: '15px'
+            }}
+          >
+            <span>المحاضرة التالية</span>
+            <ArrowLeft size={18} />
+          </Link>
+        ) : (
+          <Link
+            to="/project"
+            className="primary-button"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              textDecoration: 'none',
+              backgroundColor: '#d4a017',
+              color: '#000000',
+              padding: '12px 28px',
+              fontSize: '15px'
+            }}
+          >
+            <span>مشروع التخرج 🎓</span>
+            <ArrowLeft size={18} />
+          </Link>
+        )}
       </div>
     </div>
   )
 }
 
 export default LessonPage
+        

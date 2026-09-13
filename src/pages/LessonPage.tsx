@@ -9,15 +9,6 @@ type QuizQuestion = { id: string; prompt: string; explanation: string; quiz_opti
 type QuizResult = { score: number; passed: boolean; correctCount: number; totalCount: number }
 type LessonComment = { id: string; lesson_id: string; user_id: string; author_name: string; body: string; created_at: string }
 
-// دالة ذكية لتنظيف واستخراج كود يوتيوب الـ 11 حرفاً لتفادي الشاشة السوداء
-function extractYoutubeId(val: string): string {
-  if (!val) return ''
-  const trimmed = val.trim()
-  const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)
-  if (match && match) return match
-  return trimmed
-}
-
 export function LessonPage({ state }: { state: CourseState }) {
   const { lessonId } = useParams()
   const lesson = state.lessons.find((item) => item.id === lessonId)
@@ -26,7 +17,7 @@ export function LessonPage({ state }: { state: CourseState }) {
   const [trackingActive, setTrackingActive] = useState(false)
   const [requiredSeconds, setRequiredSeconds] = useState(0)
   const [durationSeconds, setDurationSeconds] = useState(Math.max(lesson?.durationMinutes || 1, 1) * 60)
-  const [videoId, setVideoId] = useState(extractYoutubeId(lesson?.youtubeVideoId || ''))
+  const [videoId, setVideoId] = useState(lesson?.youtubeVideoId || '')
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [questionsLoading, setQuestionsLoading] = useState(false)
   const [selected, setSelected] = useState<Record<string, string>>({})
@@ -48,7 +39,7 @@ export function LessonPage({ state }: { state: CourseState }) {
     setTrackingActive(false)
     setRequiredSeconds(Math.ceil(Math.max(lesson?.durationMinutes || 1, 1) * 60 * .85))
     setDurationSeconds(Math.max(lesson?.durationMinutes || 1, 1) * 60)
-    setVideoId(extractYoutubeId(lesson?.youtubeVideoId || ''))
+    setVideoId(lesson?.youtubeVideoId || '')
     setResult(null)
     setSelected({})
   }, [lesson?.id])
@@ -110,7 +101,7 @@ export function LessonPage({ state }: { state: CourseState }) {
     const client = supabase
     const loadVideo = async () => {
       const { data } = await client.from('lesson_media').select('youtube_video_id').eq('lesson_id', lesson.id).maybeSingle()
-      if (data?.youtube_video_id) setVideoId(extractYoutubeId(data.youtube_video_id))
+      if (data?.youtube_video_id) setVideoId(data.youtube_video_id)
     }
     void loadVideo()
   }, [lesson?.id])
@@ -130,7 +121,6 @@ export function LessonPage({ state }: { state: CourseState }) {
 
   useEffect(() => {
     if (!supabase || !lesson) return
-    const client = supabase
     let cancelled = false
     const loadComments = async () => {
       setCommentsLoading(true)
@@ -208,13 +198,10 @@ export function LessonPage({ state }: { state: CourseState }) {
       <div className="breadcrumb"><Link to="/dashboard">الرئيسية</Link><ArrowLeft size={15} /><span>المحاضرة {lesson.position}</span></div>
       <header className="lesson-header"><span className="eyebrow">المحاضرة {lesson.position} من {state.lessons.length}</span><h1>{lesson.title}</h1><p>{lesson.description}</p></header>
 
-      {/* مشغل الفيديو مع تنظيف رابط يوتيوب التلقائي */}
       {videoId ? <div className="video-frame"><iframe src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`} title={lesson.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div> : <div className="video-empty"><PlayCircle size={64} /><h2>الفيديو لم يُضف بعد</h2><p>الأدمن يضيف لينك YouTube من لوحة الإدارة.</p></div>}
 
-      {/* شريط تقدم المشاهدة الأصلي */}
       <section className="lesson-watch-progress" aria-live="polite"><div><strong>{watched ? 'أكملت الحد المطلوب للمشاهدة' : `تقدم المشاهدة ${Math.min(100, Math.floor((displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100))}%`}</strong><span>{watched ? (lesson.quizEnabled ? 'الاختبار مفتوح الآن.' : 'تم إكمال المحاضرة، والمحاضرة التالية متاحة الآن.') : (lesson.quizEnabled ? 'يلزم إكمال 85% لفتح الاختبار والمحاضرة التالية.' : 'يلزم إكمال 85% لفتح المحاضرة التالية.')}</span></div><div className="watch-track"><i style={{ width: `${Math.min(100, (displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100)}%` }} /></div></section>
 
-      {/* اختبار المحاضرة */}
       {lesson.quizEnabled && <section className={`quiz-section ${watched ? '' : 'disabled-section'}`}>
         <div className="section-heading"><div><span className="eyebrow">اختبار المحاضرة</span><h2>اتأكد إن المعلومة وصلت</h2><p>الاختبار بيتعدل من لوحة الإدارة ونتيجته محفوظة في حسابك.</p></div><span className="score-rule">درجة النجاح 70%</span></div>
         {questionsLoading ? <div className="chat-state"><Loader2 className="spin"/> جاري تحميل الاختبار...</div> : !watched ? <p className="muted">الاختبار مقفل حتى تصل إلى 85% من مدة المحاضرة.</p> : questions.length === 0 ? <p className="muted">الاختبار لم يُضف بعد لهذه المحاضرة.</p> : <form onSubmit={(event) => void submitQuiz(event)}>
@@ -227,7 +214,6 @@ export function LessonPage({ state }: { state: CourseState }) {
         </form>}
       </section>}
 
-      {/* تعليقات المحاضرة */}
       <section className="lesson-comments" aria-labelledby="lesson-comments-title">
         <div className="comments-heading"><div><span className="eyebrow">مجتمع المحاضرة</span><h2 id="lesson-comments-title">آراء وتعليقات الطلاب</h2><p>شارك رأيك أو سؤالك عن المحاضرة باحترام.</p></div><MessageCircle aria-hidden="true" /></div>
         <form className="comment-form" onSubmit={(event) => void submitComment(event)}>
@@ -239,7 +225,7 @@ export function LessonPage({ state }: { state: CourseState }) {
         {commentsLoading ? <div className="comments-state"><Loader2 className="spin"/> جاري تحميل التعليقات...</div> : comments.length === 0 ? <div className="comments-state"><MessageCircle/><strong>كن أول واحد يكتب رأيه</strong><span>تعليقك هيساعد باقي الطلاب وكابتن إيهاب يطوّر المحتوى.</span></div> : <div className="comments-list">{comments.map((comment) => <article className="comment-card" key={comment.id}><div className="comment-avatar">{comment.author_name.charAt(0) || 'ط'}</div><div className="comment-content"><header><div><strong>{comment.author_name}</strong><time>{new Date(comment.created_at).toLocaleString('ar-EG')}</time></div>{comment.user_id === commentUserId && <button type="button" onClick={() => void deleteComment(comment)} disabled={commentDeleting === comment.id} aria-label="حذف التعليق" title="حذف التعليق"><Trash2 size={16}/></button>}</header><p>{comment.body}</p></div></article>)}</div>}
       </section>
 
-      {/* شريط التنقل: زر كل المحاضرات وزر المحاضرة التالية متاحين دائماً */}
+      {/* أزرار التنقل: كل المحاضرات وزر المحاضرة التالية متاحان دائماً */}
       <div className="lesson-navigation">
         <Link to="/dashboard"><ArrowRight size={18} /> كل المحاضرات</Link>
         {nextLesson && <Link to={`/lesson/${nextLesson.id}`}>المحاضرة التالية <ArrowLeft size={18} /></Link>}

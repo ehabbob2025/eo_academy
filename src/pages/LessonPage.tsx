@@ -18,7 +18,7 @@ export function LessonPage({ state }: { state: any }) {
   const [durationSeconds, setDurationSeconds] = useState(Math.max(lesson?.durationMinutes || 1, 1) * 60)
   const [videoId, setVideoId] = useState(lesson?.youtubeVideoId || '')
   
-  // حالة تشغيل الفيديو الفعلي (لا يبدأ الحساب إلا إذا كانت true)
+  // تفعيل المراقبة عند تشغيل الفيديو
   const [isPlaying, setIsPlaying] = useState(false)
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
@@ -35,18 +35,31 @@ export function LessonPage({ state }: { state: any }) {
   const [commentError, setCommentError] = useState('')
   const nextLesson = useMemo(() => state?.lessons?.find((item: any) => item.position === (lesson?.position || 0) + 1), [state?.lessons, lesson])
 
-  // الاستماع لحالة تشغيل يوتيوب (Play / Pause)
+  // التقاط إشارات يوتيوب الحقيقية عند التشغيل والإيقاف
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!event.origin.includes('youtube.com')) return
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-        if (data?.event === 'onStateChange') {
-          // info = 1 تعني أن الفيديو شغال فعلياً، وأي رقم آخر يعني متوقف
-          setIsPlaying(data.info === 1)
+        const pState = data?.info?.playerState !== undefined ? data.info.playerState : data?.info
+        
+        // 1 تعني التشغيل
+        if (pState === 1) {
+          setIsPlaying(true)
+          setTrackingActive(true)
+        } else if (pState === 2 || pState === 0) {
+          setIsPlaying(false)
+        }
+
+        // قراءة توقيت الفيديو الفعلي من يوتيوب
+        if (typeof data?.info?.currentTime === 'number') {
+          const current = Math.floor(data.info.currentTime)
+          setDisplayWatchedSeconds(current)
+          setWatchedSeconds(current)
         }
       } catch {}
     }
+
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
   }, [])
@@ -85,7 +98,7 @@ export function LessonPage({ state }: { state: any }) {
     void loadProgress()
   }, [lesson?.id])
 
-  // تسجيل التقدم كل 10 ثوانٍ في سوبابيز فقط إذا كان الفيديو شغال فعلياً
+  // إرسال التقدم لقاعدة البيانات كل 10 ثوانٍ أثناء التشغيل
   useEffect(() => {
     if (!supabase || !lesson || !videoId || watched || !isPlaying) return
     const client = supabase
@@ -108,15 +121,15 @@ export function LessonPage({ state }: { state: any }) {
     return () => window.clearInterval(timer)
   }, [lesson?.id, videoId, watched, isPlaying])
 
-  // زيادة العداد المرئي ثانية بثانية فقط إذا كان الفيديو شغال فعلياً
+  // زيادة العداد ثانية بثانية فور تشغيل الفيديو
   useEffect(() => {
-    if (!lesson || !videoId || !trackingActive || watched || !isPlaying) return
+    if (!lesson || !videoId || watched || !isPlaying) return
     const timer = window.setInterval(() => {
       if (document.visibilityState !== 'visible' || !isPlaying) return
       setDisplayWatchedSeconds((current) => Math.min(current + 1, durationSeconds))
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [lesson?.id, videoId, trackingActive, watched, durationSeconds, isPlaying])
+  }, [lesson?.id, videoId, watched, durationSeconds, isPlaying])
 
   useEffect(() => {
     if (!supabase || !lesson) return
@@ -223,10 +236,18 @@ export function LessonPage({ state }: { state: any }) {
       <div className="breadcrumb"><Link to="/dashboard">الرئيسية</Link><ArrowLeft size={15} /><span>المحاضرة {lesson.position}</span></div>
       <header className="lesson-header"><span className="eyebrow">المحاضرة {lesson.position} من {state?.lessons?.length || 5}</span><h1>{lesson.title}</h1><p>{lesson.description}</p></header>
 
-      {/* مشغل الفيديو مع تفعيل خاصية التحكم والمراقبة enablejsapi=1 */}
+      {/* مشغل الفيديو: يبدأ الحساب فور الضغط على الفيديو */}
       {currentVideoId ? (
-        <div className="video-frame">
+        <div 
+          className="video-frame" 
+          onClick={() => { setIsPlaying(true); setTrackingActive(true); }}
+          onMouseEnter={() => {
+            const iframe = document.getElementById('lesson-youtube-iframe') as HTMLIFrameElement
+            iframe?.contentWindow?.postMessage('{"event":"listening"}', '*')
+          }}
+        >
           <iframe
+            id="lesson-youtube-iframe"
             src={"https://www.youtube.com/embed/" + currentVideoId + "?enablejsapi=1&rel=0&modestbranding=1"}
             title={lesson.title}
             onLoad={(e) => {
@@ -283,13 +304,7 @@ export function LessonPage({ state }: { state: any }) {
                     <div className="quiz-options">
                       {(question.quiz_options || []).sort((a, b) => a.position - b.position).map((option) => (
                         <label key={option.id} className={selected[question.id] === option.id ? 'selected' : ''}>
-                          <input
-                            type="radio"
-                            name={question.id}
-                            value={option.id}
-                            checked={selected[question.id] === option.id}
-                            onChange={() => setSelected((current) => ({ ...current, [question.id]: option.id }))}
-                          />
+                          <input type="radio" name={question.id} value={option.id} checked={selected[question.id] === option.id} onChange={() => setSelected((current) => ({ ...current, [question.id]: option.id }))} />
                           <span>{option.label}</span>
                         </label>
                       ))}
@@ -325,14 +340,7 @@ export function LessonPage({ state }: { state: any }) {
         </div>
         <form className="comment-form" onSubmit={(event) => void submitComment(event)}>
           <label htmlFor="lesson-comment">اكتب تعليقك</label>
-          <textarea
-            id="lesson-comment"
-            value={commentDraft}
-            onChange={(event) => setCommentDraft(event.target.value)}
-            rows={3}
-            maxLength={1000}
-            placeholder="إيه أكتر معلومة استفدت منها؟"
-          />
+          <textarea id="lesson-comment" value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} rows={3} maxLength={1000} placeholder="إيه أكتر معلومة استفدت منها؟" />
           <div>
             <small>{commentDraft.length} / 1000</small>
             <button className="primary-button" type="submit" disabled={commentSending || !commentDraft.trim()}>
@@ -370,7 +378,7 @@ export function LessonPage({ state }: { state: any }) {
         )}
       </section>
 
-      {/* شريط التنقل: زر المحاضرة التالية بنص أبيض واضح في جهة اليمين */}
+      {/* زر المحاضرة التالية الواضح بالأبيض */}
       <div
         className="lesson-navigation"
         style={{
@@ -414,8 +422,7 @@ export function LessonPage({ state }: { state: any }) {
               color: '#000000',
               padding: '12px 28px',
               fontSize: '15px',
-              borderRadius: '12px',
-              boxShadow: '0 4px 15px rgba(212, 160, 23, 0.25)'
+              borderRadius: '12px'
             }}
           >
             <span style={{ color: '#000000', fontWeight: '800' }}>مشروع التخرج 🎓</span>

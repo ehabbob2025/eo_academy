@@ -227,7 +227,6 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
       await supabase.from('ai_chat_logs').delete().eq('user_id', student.id)
       await supabase.from('profiles').delete().eq('id', student.id)
     }
-
     setNotice('تم حذف الطالب بالكامل من المنصة.')
     await loadDashboard()
   }

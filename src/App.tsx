@@ -51,7 +51,7 @@ function App() {
   }
   const [recovering, setRecovering] = useState(isRecoveryRedirect)
   useEffect(() => {
-    const subscription = supabase?.auth.onAuthStateChange((event) => {
+    const subscription = supabase?.auth.onAuthStateChange((event: string) => {
       if (event === 'PASSWORD_RECOVERY') setRecovering(true)
     })
     return () => subscription?.data.subscription.unsubscribe()

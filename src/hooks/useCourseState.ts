@@ -50,7 +50,7 @@ export function useCourseState() {
         .eq('is_published', true)
         .order('position')
       if (!data?.length) return
-      const prepared = data.map((lesson) => {
+      const prepared = data.map((lesson: any) => {
         const media = lesson.lesson_media as unknown as { youtube_video_id: string }[] | null
         const progressRows = lesson.lesson_progress as unknown as { watched_seconds: number; quiz_passed: boolean }[] | null
         const lessonProgress = progressRows?.[0]
@@ -72,11 +72,11 @@ export function useCourseState() {
           completed,
         }
       })
-      setLessons(prepared.map((entry, index) => ({
+      setLessons(prepared.map((entry: { lesson: CourseLesson; completed: boolean }, index: number) => ({
         ...entry.lesson,
         status: entry.completed
           ? 'completed'
-          : index === 0 || prepared.slice(0, index).every((previous) => previous.completed)
+          : index === 0 || prepared.slice(0, index).every((previous: { completed: boolean }) => previous.completed)
             ? 'available'
             : 'locked',
       })))

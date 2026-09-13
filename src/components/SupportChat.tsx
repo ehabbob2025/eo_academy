@@ -33,7 +33,7 @@ export function SupportChat() {
       setThreadId(thread.id)
       const { data } = await supabase!.from('support_messages').select('id,sender_id,body,created_at').eq('thread_id', thread.id).order('created_at')
       setMessages((data || []) as Message[])
-      channel = supabase!.channel(`support-${thread.id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `thread_id=eq.${thread.id}` }, (payload) => {
+      channel = supabase!.channel(`support-${thread.id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `thread_id=eq.${thread.id}` }, (payload: any) => {
         const next = payload.new as Message
         setMessages((current) => current.some((item) => item.id === next.id) ? current : [...current, next])
       }).subscribe()

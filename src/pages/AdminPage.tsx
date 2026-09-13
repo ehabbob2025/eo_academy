@@ -90,11 +90,11 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
     const { data: dbEnrollments, error: enrollmentsError } = enrollmentsResult
     setAdminId(auth.user?.id || '')
     void refreshUnreadCount(auth.user?.id || '')
-    const mediaByLesson = new Map((dbMedia || []).map((media) => [media.lesson_id, media.youtube_video_id]))
-    setLessons((dbLessons || []).map((lesson) => ({ ...lesson, lesson_media: mediaByLesson.has(lesson.id) ? [{ youtube_video_id: mediaByLesson.get(lesson.id) || '' }] : null })) as DbLesson[])
+    const mediaByLesson = new Map((dbMedia || []).map((media: any) => [media.lesson_id, media.youtube_video_id]))
+    setLessons((dbLessons || []).map((lesson: any) => ({ ...lesson, lesson_media: mediaByLesson.has(lesson.id) ? [{ youtube_video_id: mediaByLesson.get(lesson.id) || '' }] : null })) as DbLesson[])
     setThreads((dbThreads || []) as unknown as Thread[])
-    const enrollmentByUser = new Map((dbEnrollments || []).map((enrollment) => [enrollment.user_id, enrollment as DbEnrollment]))
-    const liveStudents = (dbProfiles || []).filter((profile) => profile.role !== 'admin' && !profile.is_archived).map((profile) => ({ ...profile, enrollments: enrollmentByUser.has(profile.id) ? [enrollmentByUser.get(profile.id)!] : [] })) as DbStudent[]
+    const enrollmentByUser = new Map((dbEnrollments || []).map((enrollment: any) => [enrollment.user_id, enrollment as DbEnrollment]))
+    const liveStudents = (dbProfiles || []).filter((profile: any) => profile.role !== 'admin' && !profile.is_archived).map((profile: any) => ({ ...profile, enrollments: enrollmentByUser.has(profile.id) ? [enrollmentByUser.get(profile.id)!] : [] })) as DbStudent[]
     setStudentCount(liveStudents.length)
     setStudents(liveStudents)
     if (profilesError) setNotice('تعذر تحميل الطلاب من قاعدة البيانات. شغّل تحديث صلاحيات الطلاب في Supabase ثم اضغط تحديث.')
@@ -113,7 +113,7 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
         void refreshUnreadCount(adminId)
       } }
     void load()
-    const channel = client.channel(`admin-${selectedThread}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `thread_id=eq.${selectedThread}` }, (payload) => setMessages((current) => current.some((item) => item.id === payload.new.id) ? current : [...current, payload.new as ChatMessage])).subscribe()
+    const channel = client.channel(`admin-${selectedThread}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `thread_id=eq.${selectedThread}` }, (payload: any) => setMessages((current) => current.some((item) => item.id === payload.new.id) ? current : [...current, payload.new as ChatMessage])).subscribe()
     return () => { void client.removeChannel(channel) }
   }, [selectedThread])
 

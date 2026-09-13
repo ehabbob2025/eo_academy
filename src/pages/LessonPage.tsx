@@ -32,7 +32,7 @@ export function LessonPage({ state }: { state: any }) {
   const currentIndex = allLessons.findIndex((item: any) => String(item.id) === String(lessonId))
   const nextLesson = currentIndex !== -1 && currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null
 
-  // تحديد ما إذا كان الطالب مؤهلاً للانتقال للمحاضرة التالية بناءً على الاختبار
+  // إتاحة زر المحاضرة التالية إذا اجتاز الاختبار أو إذا كانت المحاضرة بدون اختبار
   const canProceed = !lesson?.quizEnabled || Boolean(lesson?.quizPassed) || Boolean(result?.passed)
 
   useEffect(() => {
@@ -50,7 +50,6 @@ export function LessonPage({ state }: { state: any }) {
     void loadVideo()
   }, [lesson?.id])
 
-  // تحميل أسئلة الاختبار فوراً للطالب
   useEffect(() => {
     if (!supabase || !lesson?.id || !lesson?.quizEnabled) return
     const loadQuestions = async () => {
@@ -88,7 +87,6 @@ export function LessonPage({ state }: { state: any }) {
 
   if (!lesson) return <Navigate to="/dashboard" replace />
 
-  // تصحيح الاختبار وتفعيل الانتقال عند النجاح
   const submitQuiz = async (event: FormEvent) => {
     event.preventDefault()
     if (!supabase || !questions.length || !lesson?.id) return
@@ -99,9 +97,7 @@ export function LessonPage({ state }: { state: any }) {
     if (error || !data) { setError('تعذر تصحيح الاختبار. راجع إجاباتك وجرّب تاني.'); return }
     const quizResult = data as QuizResult
     setResult(quizResult)
-    if (quizResult.passed && state?.passLesson) {
-      state.passLesson(lesson.id)
-    }
+    if (quizResult.passed && state?.passLesson) state.passLesson(lesson.id)
   }
 
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
@@ -153,7 +149,7 @@ export function LessonPage({ state }: { state: any }) {
         </div>
       )}
 
-      {/* قسم الاختبار: متاح ومفتوح مباشرة للطالب ليجتازه وينتقل للمحاضرة التالية */}
+      {/* قسم الاختبار */}
       {lesson.quizEnabled && (
         <section className="quiz-section">
           <div className="section-heading">
@@ -221,7 +217,6 @@ export function LessonPage({ state }: { state: any }) {
             </button>
           </div>
         </form>
-        {commentError && <p className="form-error" role="alert">{commentError}</p>}
         {commentsLoading ? (
           <div className="comments-state"><Loader2 className="spin"/> جاري تحميل التعليقات...</div>
         ) : comments.length === 0 ? (
@@ -251,7 +246,7 @@ export function LessonPage({ state }: { state: any }) {
         )}
       </section>
 
-      {/* زر المحاضرة التالية: يفتح للطالب مباشرة عند اجتياز الاختبار */}
+      {/* أزرار التنقل */}
       <div
         className="lesson-navigation"
         style={{

@@ -325,8 +325,8 @@ export function LessonPage({ state }: { state: any }) {
         )}
       </section>
 
-      {/* شريط التنقل */}
-      <div className="lesson-navigation">
+      {/* شريط التنقل: تم جمع الزرين معاً في جهة اليمين بمسافة واضحة بينهما */}
+      <div className="lesson-navigation" style={{ display: 'flex', gap: '20px', justifyContent: 'flex-start', alignItems: 'center', marginBlock: '24px' }}>
         <Link to="/dashboard"><ArrowRight size={18} /> كل المحاضرات</Link>
         {nextLesson && <Link to={"/lesson/" + nextLesson.id}>المحاضرة التالية <ArrowLeft size={18} /></Link>}
       </div>

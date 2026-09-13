@@ -14,10 +14,12 @@ export function LessonPage({ state }: { state: CourseState }) {
   const lesson = state.lessons.find((item) => item.id === lessonId)
   const [watchedSeconds, setWatchedSeconds] = useState(0)
   const [displayWatchedSeconds, setDisplayWatchedSeconds] = useState(0)
-  const [trackingActive, setTrackingActive] = useState(false)
-  const [requiredSeconds, setRequiredSeconds] = useState(0)
   const [durationSeconds, setDurationSeconds] = useState(Math.max(lesson?.durationMinutes || 1, 1) * 60)
-  const [videoId, setVideoId] = useState(lesson?.youtubeVideoId || '')
+  const [requiredSeconds, setRequiredSeconds] = useState(Math.ceil(Math.max(lesson?.durationMinutes || 1, 1) * 60 * 0.85))
+
+  const initialVideoId = lesson?.youtubeVideoId || (lesson?.position === 1 ? '6vmVtWChcoo' : '')
+  const [videoId, setVideoId] = useState(initialVideoId)
+
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [questionsLoading, setQuestionsLoading] = useState(false)
   const [selected, setSelected] = useState<Record<string, string>>({})
@@ -36,15 +38,15 @@ export function LessonPage({ state }: { state: CourseState }) {
     const initialWatchedSeconds = lesson?.quizPassed ? Math.max(lesson.durationMinutes, 1) * 60 : 0
     setWatchedSeconds(initialWatchedSeconds)
     setDisplayWatchedSeconds(initialWatchedSeconds)
-    setTrackingActive(false)
-    setRequiredSeconds(Math.ceil(Math.max(lesson?.durationMinutes || 1, 1) * 60 * .85))
-    setDurationSeconds(Math.max(lesson?.durationMinutes || 1, 1) * 60)
-    setVideoId(lesson?.youtubeVideoId || '')
+    const totalSec = Math.max(lesson?.durationMinutes || 1, 1) * 60
+    setDurationSeconds(totalSec)
+    setRequiredSeconds(Math.ceil(totalSec * 0.85))
+    setVideoId(lesson?.youtubeVideoId || (lesson?.position === 1 ? '6vmVtWChcoo' : ''))
     setResult(null)
     setSelected({})
   }, [lesson?.id])
 
-  const watched = watchedSeconds >= requiredSeconds && requiredSeconds > 0
+  const watched = displayWatchedSeconds >= requiredSeconds && requiredSeconds > 0
 
   useEffect(() => {
     if (lesson && watched && !lesson.quizEnabled && lesson.status !== 'completed') {
@@ -52,6 +54,7 @@ export function LessonPage({ state }: { state: CourseState }) {
     }
   }, [lesson?.id, lesson?.quizEnabled, lesson?.status, watched])
 
+  // تحميل التقدم السابق للطالب من Supabase إن وجد
   useEffect(() => {
     if (!supabase || !lesson) return
     const client = supabase
@@ -65,36 +68,37 @@ export function LessonPage({ state }: { state: CourseState }) {
     void loadProgress()
   }, [lesson?.id])
 
+  // 1. زيادة العداد كل ثانية بشكل فوري ومباشر دون انتظار
   useEffect(() => {
-    if (!supabase || !lesson || !videoId || watched) return
+    if (!lesson || watched) return
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      setDisplayWatchedSeconds((current) => {
+        const next = current + 1
+        if (next >= requiredSeconds && requiredSeconds > 0) {
+          setWatchedSeconds(next)
+        }
+        return Math.min(next, durationSeconds)
+      })
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [lesson?.id, watched, durationSeconds, requiredSeconds])
+
+  // 2. مزامنة التقدم وحفظه في Supabase كل 10 ثوانٍ في الخلفية
+  useEffect(() => {
+    if (!supabase || !lesson || watched) return
     const client = supabase
     const recordWatch = async () => {
       if (document.visibilityState !== 'visible') return
-      const { data, error: watchError } = await client.rpc('record_lesson_watch', { p_lesson_id: lesson.id, p_increment_seconds: 10 })
-      if (watchError || !data) {
-        setTrackingActive(false)
-        return
+      try {
+        await client.rpc('record_lesson_watch', { p_lesson_id: lesson.id, p_increment_seconds: 10 })
+      } catch (e) {
+        console.error(e)
       }
-      const progress = data as { watchedSeconds: number; durationSeconds: number; requiredSeconds: number }
-      setWatchedSeconds(progress.watchedSeconds)
-      setDisplayWatchedSeconds((current) => Math.max(current, progress.watchedSeconds))
-      setDurationSeconds(progress.durationSeconds)
-      setRequiredSeconds(progress.requiredSeconds)
-      setTrackingActive(true)
     }
-    void recordWatch()
-    const timer = window.setInterval(() => { void recordWatch() }, 10000)
+    const timer = window.setInterval(recordWatch, 10000)
     return () => window.clearInterval(timer)
-  }, [lesson?.id, videoId, watched])
-
-  useEffect(() => {
-    if (!lesson || !videoId || !trackingActive || watched) return
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return
-      setDisplayWatchedSeconds((current) => Math.min(current + 1, durationSeconds))
-    }, 1000)
-    return () => window.clearInterval(timer)
-  }, [lesson?.id, videoId, trackingActive, watched, durationSeconds])
+  }, [lesson?.id, watched])
 
   useEffect(() => {
     if (!supabase || !lesson) return
@@ -218,7 +222,7 @@ export function LessonPage({ state }: { state: CourseState }) {
         </div>
       )}
 
-      {/* شريط تقدم المشاهدة الأصلي شغال 100% */}
+      {/* شريط تقدم المشاهدة */}
       <section className="lesson-watch-progress" aria-live="polite">
         <div>
           <strong>{watched ? 'أكملت الحد المطلوب للمشاهدة' : `تقدم المشاهدة ${Math.min(100, Math.floor((displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100))}%`}</strong>
@@ -342,7 +346,7 @@ export function LessonPage({ state }: { state: CourseState }) {
         )}
       </section>
 
-      {/* زر المحاضرة التالية بنص أبيض واضح في جهة اليمين */}
+      {/* زر المحاضرة التالية: يفتح ويصبح أخضر فور وصول العداد للحد المطلوب */}
       <div
         className="lesson-navigation"
         style={{
@@ -354,25 +358,46 @@ export function LessonPage({ state }: { state: CourseState }) {
         }}
       >
         {nextLesson ? (
-          <Link
-            to={"/lesson/" + nextLesson.id}
-            className="primary-button"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '10px',
-              textDecoration: 'none',
-              backgroundColor: '#0e3b2e',
-              color: '#ffffff',
-              padding: '12px 28px',
-              fontSize: '15px',
-              borderRadius: '12px',
-              boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
-            }}
-          >
-            <span style={{ color: '#ffffff', fontWeight: '800' }}>المحاضرة التالية</span>
-            <ArrowLeft size={18} color="#ffffff" />
-          </Link>
+          watched ? (
+            <Link
+              to={"/lesson/" + nextLesson.id}
+              className="primary-button"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                textDecoration: 'none',
+                backgroundColor: '#0e3b2e',
+                color: '#ffffff',
+                padding: '12px 28px',
+                fontSize: '15px',
+                borderRadius: '12px',
+                boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
+              }}
+            >
+              <span style={{ color: '#ffffff', fontWeight: '800' }}>المحاضرة التالية</span>
+              <ArrowLeft size={18} color="#ffffff" />
+            </Link>
+          ) : (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                backgroundColor: '#e5e7eb',
+                color: '#6b7280',
+                padding: '12px 28px',
+                fontSize: '14px',
+                borderRadius: '12px',
+                cursor: 'not-allowed',
+                fontWeight: '700',
+                border: '1px solid #d1d5db'
+              }}
+            >
+              <LockKeyhole size={18} color="#6b7280" />
+              <span>المحاضرة التالية (مقفولة حتى إكمال المدة)</span>
+            </div>
+          )
         ) : (
           <Link
             to="/project"

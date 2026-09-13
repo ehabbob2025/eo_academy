@@ -13,11 +13,6 @@ export function LessonPage({ state }: { state: any }) {
   const allLessons: any[] = state?.lessons || []
   const lesson = allLessons.find((item: any) => String(item.id) === String(lessonId))
   
-  const totalMinutes = Math.max(Number(lesson?.durationMinutes) || 10, 1)
-  const durationSeconds = totalMinutes * 60
-  const requiredSeconds = Math.ceil(durationSeconds * 0.85)
-
-  const [displayWatchedSeconds, setDisplayWatchedSeconds] = useState(0)
   const [videoId, setVideoId] = useState(lesson?.youtubeVideoId || '')
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
@@ -25,6 +20,7 @@ export function LessonPage({ state }: { state: any }) {
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [result, setResult] = useState<QuizResult | null>(null)
   const [error, setError] = useState('')
+  
   const [comments, setComments] = useState<LessonComment[]>([])
   const [commentUserId, setCommentUserId] = useState('')
   const [commentDraft, setCommentDraft] = useState('')
@@ -36,39 +32,14 @@ export function LessonPage({ state }: { state: any }) {
   const currentIndex = allLessons.findIndex((item: any) => String(item.id) === String(lessonId))
   const nextLesson = currentIndex !== -1 && currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null
 
-  // 1. عداد تقدم المشاهدة: يزيد ثانية بثانية مباشرة
+  // تحديد ما إذا كان الطالب مؤهلاً للانتقال للمحاضرة التالية بناءً على الاختبار
+  const canProceed = !lesson?.quizEnabled || Boolean(lesson?.quizPassed) || Boolean(result?.passed)
+
   useEffect(() => {
-    setDisplayWatchedSeconds(0)
     setVideoId(lesson?.youtubeVideoId || (lesson?.position === 1 ? '6vmVtWChcoo' : ''))
     setResult(null)
     setSelected({})
   }, [lessonId])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return
-      setDisplayWatchedSeconds((current) => {
-        const next = current + 1
-        if (next >= requiredSeconds && lesson?.id && state?.completeLesson) {
-          state.completeLesson(lesson.id)
-        }
-        return Math.min(next, durationSeconds)
-      })
-    }, 1000)
-    return () => window.clearInterval(timer)
-  }, [lessonId, durationSeconds, requiredSeconds])
-
-  // حفظ التقدم في Supabase في الخلفية
-  useEffect(() => {
-    if (!supabase || !lesson?.id) return
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return
-      try {
-        supabase.rpc('record_lesson_watch', { p_lesson_id: lesson.id, p_increment_seconds: 10 })
-      } catch {}
-    }, 10000)
-    return () => window.clearInterval(timer)
-  }, [lesson?.id])
 
   useEffect(() => {
     if (!supabase || !lesson?.id) return
@@ -79,6 +50,7 @@ export function LessonPage({ state }: { state: any }) {
     void loadVideo()
   }, [lesson?.id])
 
+  // تحميل أسئلة الاختبار فوراً للطالب
   useEffect(() => {
     if (!supabase || !lesson?.id || !lesson?.quizEnabled) return
     const loadQuestions = async () => {
@@ -116,6 +88,7 @@ export function LessonPage({ state }: { state: any }) {
 
   if (!lesson) return <Navigate to="/dashboard" replace />
 
+  // تصحيح الاختبار وتفعيل الانتقال عند النجاح
   const submitQuiz = async (event: FormEvent) => {
     event.preventDefault()
     if (!supabase || !questions.length || !lesson?.id) return
@@ -126,7 +99,9 @@ export function LessonPage({ state }: { state: any }) {
     if (error || !data) { setError('تعذر تصحيح الاختبار. راجع إجاباتك وجرّب تاني.'); return }
     const quizResult = data as QuizResult
     setResult(quizResult)
-    if (quizResult.passed && state?.passLesson) state.passLesson(lesson.id)
+    if (quizResult.passed && state?.passLesson) {
+      state.passLesson(lesson.id)
+    }
   }
 
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
@@ -154,7 +129,6 @@ export function LessonPage({ state }: { state: any }) {
   }
 
   const currentVideoId = videoId || (lesson?.position === 1 ? '6vmVtWChcoo' : '')
-  const progressPercent = Math.min(100, Math.floor((displayWatchedSeconds / Math.max(durationSeconds, 1)) * 100))
 
   return (
     <div className="lesson-page">
@@ -179,37 +153,24 @@ export function LessonPage({ state }: { state: any }) {
         </div>
       )}
 
-      {/* شريط تقدم المشاهدة: يزيد كل ثانية أمام عين الطالب */}
-      <section className="lesson-watch-progress" aria-live="polite">
-        <div>
-          <strong>تقدم المشاهدة {progressPercent}%</strong>
-          <span>{progressPercent >= 85 ? 'تم إكمال الحد المطلوب للمشاهدة بنجاح.' : 'يلزم إكمال 85% لفتح الاختبار والمحاضرة التالية.'}</span>
-        </div>
-        <div className="watch-track">
-          <i style={{ width: `${progressPercent}%` }} />
-        </div>
-      </section>
-
-      {/* قسم الاختبار */}
+      {/* قسم الاختبار: متاح ومفتوح مباشرة للطالب ليجتازه وينتقل للمحاضرة التالية */}
       {lesson.quizEnabled && (
-        <section className={`quiz-section ${progressPercent >= 85 ? '' : 'disabled-section'}`}>
+        <section className="quiz-section">
           <div className="section-heading">
             <div>
               <span className="eyebrow">اختبار المحاضرة</span>
               <h2>اتأكد إن المعلومة وصلت</h2>
-              <p>الاختبار بيتعدل من لوحة الإدارة ونتيجته محفوظة في حسابك.</p>
+              <p>اجتز الاختبار لفتح المحاضرة التالية بنجاح.</p>
             </div>
             <span className="score-rule">درجة النجاح 70%</span>
           </div>
           {questionsLoading ? (
             <div className="chat-state"><Loader2 className="spin"/> جاري تحميل الاختبار...</div>
-          ) : progressPercent < 85 ? (
-            <p className="muted">الاختبار مقفل حتى تصل إلى 85% من مدة المحاضرة.</p>
           ) : questions.length === 0 ? (
             <p className="muted">الاختبار لم يُضف بعد لهذه المحاضرة.</p>
           ) : (
             <form onSubmit={(event) => void submitQuiz(event)}>
-              <fieldset disabled={Boolean(result?.passed)}>
+              <fieldset disabled={Boolean(result?.passed || lesson?.quizPassed)}>
                 {questions.map((question, index) => (
                   <div className="quiz-question" key={question.id}>
                     <legend>{index + 1}. {question.prompt}</legend>
@@ -225,16 +186,16 @@ export function LessonPage({ state }: { state: any }) {
                 ))}
               </fieldset>
               {error && <p className="form-error">{error}</p>}
-              {result && (
-                <div className={`result-message ${result.passed ? 'success' : 'error'}`}>
-                  {result.passed ? <CheckCircle2 /> : <CircleAlert />}
+              {(result?.passed || lesson?.quizPassed) && (
+                <div className="result-message success">
+                  <CheckCircle2 />
                   <div>
-                    <strong>{result.passed ? 'مبروك — المحاضرة التالية اتفتحت' : 'لسه محتاج مراجعة بسيطة'}</strong>
-                    <span>درجتك {Math.round(result.score)}% — {result.correctCount} من {result.totalCount} صحيحة.</span>
+                    <strong>مبروك — تم اجتياز الاختبار بنجاح وفتح المحاضرة التالية!</strong>
+                    {result && <span>درجتك {Math.round(result.score)}% — {result.correctCount} من {result.totalCount} صحيحة.</span>}
                   </div>
                 </div>
               )}
-              {!result?.passed && <button className="primary-button" type="submit">إرسال الإجابات <ArrowLeft size={19} /></button>}
+              {!(result?.passed || lesson?.quizPassed) && <button className="primary-button" type="submit">إرسال الإجابات والتحقق <ArrowLeft size={19} /></button>}
             </form>
           )}
         </section>
@@ -290,7 +251,7 @@ export function LessonPage({ state }: { state: any }) {
         )}
       </section>
 
-      {/* زر المحاضرة التالية: مفتوح دائماً بالأخضر لينقل الطالب للمحاضرة التالية فوراً بدون حجب */}
+      {/* زر المحاضرة التالية: يفتح للطالب مباشرة عند اجتياز الاختبار */}
       <div
         className="lesson-navigation"
         style={{
@@ -302,26 +263,47 @@ export function LessonPage({ state }: { state: any }) {
         }}
       >
         {nextLesson ? (
-          <Link
-            to={"/lesson/" + nextLesson.id}
-            className="primary-button"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '10px',
-              textDecoration: 'none',
-              backgroundColor: '#0e3b2e',
-              color: '#ffffff',
-              padding: '14px 32px',
-              fontSize: '16px',
-              borderRadius: '12px',
-              fontWeight: '800',
-              boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
-            }}
-          >
-            <span style={{ color: '#ffffff' }}>المحاضرة التالية</span>
-            <ArrowLeft size={18} color="#ffffff" />
-          </Link>
+          canProceed ? (
+            <Link
+              to={"/lesson/" + nextLesson.id}
+              className="primary-button"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                textDecoration: 'none',
+                backgroundColor: '#0e3b2e',
+                color: '#ffffff',
+                padding: '14px 32px',
+                fontSize: '16px',
+                borderRadius: '12px',
+                fontWeight: '800',
+                boxShadow: '0 4px 15px rgba(14, 59, 46, 0.25)'
+              }}
+            >
+              <span style={{ color: '#ffffff' }}>المحاضرة التالية</span>
+              <ArrowLeft size={18} color="#ffffff" />
+            </Link>
+          ) : (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                backgroundColor: '#f3f4f6',
+                color: '#6b7280',
+                padding: '14px 28px',
+                fontSize: '15px',
+                borderRadius: '12px',
+                cursor: 'not-allowed',
+                fontWeight: '700',
+                border: '1px solid #d1d5db'
+              }}
+            >
+              <LockKeyhole size={18} color="#6b7280" />
+              <span>المحاضرة التالية (يلزم اجتياز اختبار المحاضرة أولاً)</span>
+            </div>
+          )
         ) : (
           <Link
             to="/project"

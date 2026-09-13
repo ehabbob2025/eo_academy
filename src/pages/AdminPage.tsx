@@ -15,7 +15,14 @@ type QuizAttempt = { id: string; lesson_id: string; score: number; passed: boole
 
 function extractYouTubeId(value: string) {
   const trimmed = value.trim(); if (!trimmed) return ''
-  try { const url = new URL(trimmed); if (url.hostname.includes('youtu.be')) return url.pathname.split('/').filter(Boolean)[0] || ''; if (url.searchParams.get('v')) return url.searchParams.get('v') || ''; const parts = url.pathname.split('/').filter(Boolean); const marker = parts.findIndex((part) => ['embed', 'shorts', 'live'].includes(part)); return marker >= 0 ? parts[marker + 1] || '' : parts.at(-1) || '' } catch { return trimmed }
+  try { 
+    const url = new URL(trimmed); 
+    if (url.hostname.includes('youtu.be')) return url.pathname.split('/').filter(Boolean)[0] || ''; 
+    if (url.searchParams.get('v')) return url.searchParams.get('v') || ''; 
+    const parts = url.pathname.split('/').filter(Boolean); 
+    const marker = parts.findIndex((part) => ['embed', 'shorts', 'live'].includes(part)); 
+    return marker >= 0 ? parts[marker + 1] || '' : parts[parts.length - 1] || ''; 
+  } catch { return trimmed }
 }
 
 export function AdminPage({ state: _state }: { state: CourseState }) {
@@ -205,22 +212,18 @@ export function AdminPage({ state: _state }: { state: CourseState }) {
     setNotice('تم تعديل اسم الطالب.'); await loadDashboard()
   }
 
-  // حذف الطالب نهائياً من المنصة مع إخفائه فوراً من الشاشة
   const deleteStudent = async (student: DbStudent) => {
     if (!supabase) return
     if (!window.confirm(`حذف الطالب «${student.full_name || 'بدون اسم'}» نهائيًا من المنصة؟ سيتم مسح حسابه وكل بياناته.`)) return
     
-    // 1. إخفاء الطالب من الشاشة فوراً
     setStudents((current) => current.filter((item) => item.id !== student.id))
     setStudentCount((prev) => Math.max(0, prev - 1))
     if (resultsFor?.id === student.id) { setResultsFor(null); setStudentAttempts([]) }
     setNotice('جاري الحذف النهائي للطالب...')
 
-    // 2. استدعاء دالة الحذف الشامل في Supabase
     const { error } = await supabase.rpc('delete_student_completely', { target_user_id: student.id })
     
     if (error) {
-      // حذف متتابع بديل لضمان مسح الطالب حتى لو حدث خطأ
       await supabase.from('lesson_progress').delete().eq('user_id', student.id)
       await supabase.from('lesson_comments').delete().eq('user_id', student.id)
       await supabase.from('enrollments').delete().eq('user_id', student.id)

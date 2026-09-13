@@ -100,7 +100,6 @@ export function LessonPage({ state }: { state: any }) {
           const threshold = totalDurationSeconds * 0.85
           if (next >= threshold && !isWatchedEnough) {
             setIsWatchedEnough(true)
-            // حفظ حالة الإكمال في قاعدة البيانات
             void supabase.from('lesson_progress').upsert({
               user_id: commentUserId,
               lesson_id: lesson.id,
@@ -109,7 +108,6 @@ export function LessonPage({ state }: { state: any }) {
               updated_at: new Date().toISOString()
             }, { onConflict: 'user_id,lesson_id' })
           } else if (next % 10 === 0) {
-            // حفظ دوري كل 10 ثوانٍ لتجنب فقدان التقدم
             void supabase.from('lesson_progress').upsert({
               user_id: commentUserId,
               lesson_id: lesson.id,
